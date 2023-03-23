@@ -1,4 +1,5 @@
 #include <Windows.h>
+#define NL printf('\n')
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 
 #pragma once

