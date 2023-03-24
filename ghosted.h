@@ -8,9 +8,18 @@
 #define PS_INHERIT_HANDLES  4
 #define GDI_HANDLE_BUFFER_SIZE      34
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
-
 #pragma once
 
+// Check NT_STATUS
+BOOL __check_nt_status(NTSTATUS status, const char * func_name) {
+    if NT_SUCCESS(status) {
+        return TRUE;
+    }
+    else {
+        fprintf(stderr, "[!] %s Failed (0x%x)\n", func_name, status);
+        return FALSE;
+    }
+}
 
 typedef LONG KPRIORITY;
 

