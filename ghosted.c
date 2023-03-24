@@ -7,6 +7,11 @@
 #include "ghosted.h"
 
 #pragma comment(lib, "ntdll")
+// Store child process info
+typedef struct _CP_INFO {
+    HANDLE p_handle;
+    PROCESS_BASIC_INFORMATION pb_info;
+} CP_INFO, * PCP_INFO;
 
 // Get address where file is loaded in memory
 LPVOID get_loaded_addr(HANDLE hfile, DWORD f_size) {
@@ -45,9 +50,50 @@ LPVOID get_loaded_addr(HANDLE hfile, DWORD f_size) {
 	}
 
 	printf("> File is mapped into memory at: 0x%p\n", base_addr);
+	CloseHandle(hmap);
 	return base_addr;
 }
 
+// Get NT Header Data
+IMAGE_NT_HEADERS * get_nt_hdr(unsigned char * base_addr) {
+	IMAGE_DOS_HEADER* dos_hdr = (IMAGE_DOS_HEADER*)base_addr;
+
+	if (dos_hdr->e_magic != IMAGE_DOS_SIGNATURE) {
+		fprintf(stderr, "[!] Invalid DOS Header\n");
+		return NULL;
+	}
+	
+	LONG pe_offset = dos_hdr->e_lfanew;
+	printf("> PE Offset 0x%x\n", pe_offset);
+
+	// Check if offset is greater than header size
+	if (pe_offset > 1024) {
+		fprintf(stderr, "[!] PE Offset beyond bounds\n");
+		return NULL;
+	}
+
+	// Get NT Header
+	IMAGE_NT_HEADERS * nt_hdr = (IMAGE_NT_HEADERS *)(base_addr + pe_offset);
+
+	if (nt_hdr->Signature != IMAGE_NT_SIGNATURE) {
+		fprintf(stderr, "[!] Invalid NT Signature!\n");
+		return NULL;
+	}
+	return nt_hdr;
+}
+
+// Get Entrypoint Relative Virtual Address
+DWORD get_ep_rva(LPVOID * base_addr) {
+	IMAGE_NT_HEADERS * nt_hdr = get_nt_hdr((unsigned char *)base_addr);
+
+	if (nt_hdr == NULL) {
+		return 0;
+	}
+
+	WORD arch = nt_hdr->FileHeader.Machine;
+	
+	return nt_hdr->OptionalHeader.AddressOfEntryPoint;
+}
 
 // Prepare fake_exe and put it in delete mode
 HANDLE prepare_target(char * target_exe) {
@@ -205,11 +251,19 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 	return hsection;
 }
 
+// Create Child process, gquey it and return a handle 
+CP_INFO create_cp() {
+	CP_INFO p_info;
+	RtlZeroMemory(&p_info, sizeof(CP_INFO));
+	return p_info;
+}
+
 // Spawn a process using ghosting
 int spawn_process(char* real_exe, char* fake_exe) {
 	DWORD f_size;
-	HANDLE hfakefile, hsection;
+	HANDLE hfakefile, hsection, hprocess;
 	LPVOID base_addr;
+	DWORD entry_point_addr;
 
 	// Create fake executable and put it in delete-pending state
 	hfakefile = prepare_target(fake_exe);
@@ -240,16 +294,23 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		CloseHandle(hfakefile);
 		return -4;	
 	}
-	// unsigned int _res = get_entrypoint(hfakefile, lo_fsz);
-	// if (_res == 0) {
-	// 	fprintf(stderr, "[!] Failed to get Entry Point\n");
-	// 	return -10;
-	// }
+
+	DWORD entry_point = get_ep_rva(base_addr);
+	UnmapViewOfFile(base_addr);
+	CloseHandle(hfakefile);
+	if (entry_point == 0) {
+		CloseHandle(hsection);
+		return -5;
+	}
+
+	printf("> Entry Point: 0x%x\n", entry_point);
+
+	printf("===== Creating Child Process =====\n");
+	hprocess = NULL;
+
 
 	// CloseHandle(hsection);
-	UnmapViewOfFile(base_addr);
 	CloseHandle(hsection);
-	CloseHandle(hfakefile);
 	return 0;
 }
 
