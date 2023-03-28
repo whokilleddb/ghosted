@@ -631,8 +631,6 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	free(_peb_copy);
 	ULONGLONG image_base = (ULONGLONG)(peb_copy.ImageBaseAddress);
 	ULONGLONG proc_entry = entry_point + image_base;
-	printf("0x%x\n", proc_entry);
-
 	printf("==== Creating Child Process ====\n");
 
 	HANDLE hthread = NULL;
