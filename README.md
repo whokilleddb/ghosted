@@ -20,5 +20,44 @@ This means that callbacks are registered only when the first thread is spawned, 
 
 ## Show and Tell
 
+First, let us write a demo application which we will use to demonstrate certain artifacts throughout:
+
+```c
+// demo.c
+#include <windows.h>
+#include <stdio.h>
+
+int main() {
+	printf("Hello From PID: %d\n", GetCurrentProcessId());
+	getchar();
+	return 0;
+}
+```
+
+Compiling and running this program outputs the process's PID. Running the process and inspecting it's properties in _Process Hacker2_ shows the following:
+
+![](./img/demo_in_ph2.png)
+
+Notice how the `demo.exe` executable is listed as the `Image File name` for the process? However, one can delete the executable and the process would still be live. Quoting Gabriel Landau here:
+
+> It’s important to note that processes are not executables, and executables are not processes.
+
+This [blog](https://fourcore.io/blogs/how-a-windows-process-is-created-part-2) does a good job of explaining the process creation flow carried out by [CreateProcess()](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa) to launch a process on Windows.
+
+
+
+But how is a process created from an exe?
+
+## Talk is Cheap, Show me the code!
+
+Time to walk through the code flow for the project! The code is written in C because: 
+- It helps to understand everything going on at a very fundamental level
+- Because I can.
+
+Right away, the `main()` 
+
+
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
+- https://fourcore.io/blogs/how-a-windows-process-is-created-part-1
+- https://dosxuz.gitlab.io/post/processghosting/
