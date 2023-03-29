@@ -42,11 +42,16 @@ Notice how the `demo.exe` executable is listed as the `Image File name` for the 
 
 > It’s important to note that processes are not executables, and executables are not processes.
 
-This [blog](https://fourcore.io/blogs/how-a-windows-process-is-created-part-2) does a good job of explaining the process creation flow carried out by [CreateProcess()](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa) to launch a process on Windows.
+This [blog](https://fourcore.io/blogs/how-a-windows-process-is-created-part-2) does a good job of explaining the process creation flow carried out by [CreateProcess()](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa) to launch a process on Windows. Long story short, Windows uses function calls like `NtCreateUserProcess()` to launch a process, but the indiviual API components can also be called to launch a process. 
+
+The steps to launch a process from an executable can be summarized as such:
+- Open an Executable file and get a handle to it
+- Create an `Image Section` for the file and map the appropriate memory
+- Create a Process out of the mapped section
+- Assign appropriate environment variables and process arguments
+- Create a Thread to execute the process
 
 
-
-But how is a process created from an exe?
 
 ## Talk is Cheap, Show me the code!
 
