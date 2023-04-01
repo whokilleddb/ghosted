@@ -18,7 +18,7 @@ However, there is a catch. Looking at the documentation for [`PsSetCreateProcess
 
 This means that callbacks are registered only when the first thread is spawned, which gives malware a window between time of creation and the time at which security vendors are notified about it. It is in this interval that malware can carry out image tampering leading to attacks like `Process Doppelgänging`, `Process Herpaderping` and `Process Ghosting`.
 
-## Show and Tell
+## Processes vs Exes
 
 First, let us write a demo application which we will use to demonstrate certain artifacts throughout:
 
@@ -51,6 +51,70 @@ The steps to launch a process from an executable can be summarized as such:
 - Assign appropriate environment variables and process arguments
 - Create a Thread to execute the process
 
+Again, quoting  Gabriel Landau:
+> Processes are launched from executables, but some of the data within the executable file is modified as it is mapped into a process. To account for these modifications, the Windows memory manager caches image sections at the time of their creation. **This means that image sections can deviate from their executable files.**
+
+Windows provides APIs like [PsSetCreateProcessNotifyRoutineEx](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreatethreadnotifyroutineex) and [PsSetCreateThreadNotifyRoutineEx](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutineex) to receive callbacks upon creation of processes and threads. Security vendors can register callbacks using these functions and monitor processes/threads. 
+
+However, as mentioned before, [PsSetCreateProcessNotifyRoutineEx](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreatethreadnotifyroutineex) callbacks are registered only when the first thread is spawned, therefore there is a delay between the process creation time vs when the security products are notified of it, providing a window to tamper with the executable and the associated section.
+
+## Hot Functions in your Area
+
+There are two functions we need to take a look at -   [NtCreateProcess](http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FProcess%2FNtCreateProcess.html). 
+and [PsSetCreateProcessNotifyRoutine](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutine).
+
+The function definition of `NtCreateProcess()` is as follows:
+
+```c
+NTSYSAPI 
+NTSTATUS
+NTAPI
+  
+NtCreateProcess(
+  OUT PHANDLE           _ProcessHandle_,
+  IN ACCESS_MASK        _DesiredAccess_,
+  IN POBJECT_ATTRIBUTES _ObjectAttributes_ OPTIONAL,
+  IN HANDLE             _ParentProcess_,
+  IN BOOLEAN            _InheritObjectTable_,
+  IN HANDLE             _SectionHandle_ OPTIONAL,
+  IN HANDLE             _DebugPort_ OPTIONAL,
+  IN HANDLE             _ExceptionPort_ OPTIONAL );
+```
+
+Note how the function takes the handle to a Secion, and not a file? This symbolizes that we don't necessarily need a file-on-disk to create a process.
+
+Next up, look up the defintion of [PsSetCreateProcessNotifyRoutine](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutine):
+
+```Cpp
+NTSTATUS PsSetCreateProcessNotifyRoutine( [in] PCREATE_PROCESS_NOTIFY_ROUTINE NotifyRoutine, [in] BOOLEAN Remove );
+```
+
+Again, looking up the definition of [PS_CREATE_NOTIFY_INFO](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_ps_create_notify_info) structure, we get:
+```c
+typedef struct _PS_CREATE_NOTIFY_INFO {
+  SIZE_T              Size;
+  union {
+    ULONG Flags;
+    struct {
+      ULONG FileOpenNameAvailable : 1;
+      ULONG IsSubsystemProcess : 1;
+      ULONG Reserved : 30;
+    };
+  };
+  HANDLE              ParentProcessId;
+  CLIENT_ID           CreatingThreadId;
+  struct _FILE_OBJECT *FileObject;
+  PCUNICODE_STRING    ImageFileName;
+  PCUNICODE_STRING    CommandLine;
+  NTSTATUS            CreationStatus;
+} PS_CREATE_NOTIFY_INFO, *PPS_CREATE_NOTIFY_INFO;
+```
+
+
+
+## Boo! A Ghost! 👻
+
+On Windows, it is possible 
 
 
 ## Talk is Cheap, Show me the code!
