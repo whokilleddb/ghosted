@@ -110,6 +110,7 @@ typedef struct _PS_CREATE_NOTIFY_INFO {
 } PS_CREATE_NOTIFY_INFO, *PPS_CREATE_NOTIFY_INFO;
 ```
 
+Of interest here is the `struct _FILE_OBJECT *FileObject` field which is a pointer to the file object for the process executable file. Callback functions can use this to scan the executable on disk for malware. But what if the executable has been deleted.....?
 
 
 ## Boo! A Ghost! 👻
