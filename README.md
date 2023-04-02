@@ -115,7 +115,19 @@ Of interest here is the `struct _FILE_OBJECT *FileObject` field which is a point
 
 ## Boo! A Ghost! 👻
 
-On Windows, it is possible 
+Some of the ways to delete a file include:
+- Overwrite it by using the `FILE_SUPERSEDED` flag with [NtCreateFile()](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile)
+- Using the `CREATE_ALWAYS` flag with [CreateFile()](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
+- Using `FILE_DELETE_ON_CLOSE` and `FILE_FLAG_DELETE_ON_CLOSE`  flag with [CreateFile()](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
+- Set the `DeleteFile` field in the [FILE_DISPOSITION_INFORMATION](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_disposition_information) structure to `TRUE` when invoking the `FileDispositionInformation` file information class via [NtSetInformationFile()](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntsetinformationfile)
+
+However, Windows does not like mapped executables being tampered with so it starts throwing off a bunch of errors when we attempt to open it. 
+
+- Trying to open the file with `NtCreateFile()` with the access set to `FILE_WRITE_DATA`, or via `CreateFile()` with `FILE_DELETE_ON_CLOSE/FILE_FLAG_DELETE_ON_CLOSE` flags will result in`ERROR_SHARING_VIOLATION` 
+- 'NtSetInformationFile()' fails with `STATUS_CANNOT_DELETE` even when `DELETE` access right is granted
+- Trying to overwrite the file with `CREATE_ALWAYS` will result in `ACCESS_DENIED`
+The interesting fact here is that these restrictions come in only when the executable is mapped into an Image Section. This mechanism allows for the following flow:
+
 
 
 ## Talk is Cheap, Show me the code!
