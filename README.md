@@ -130,8 +130,8 @@ The interesting fact here is that these restrictions come in only when the execu
 
 ![](./img/possible_behaviour.png)
 
-`Process Ghosting` follows a similar flow, which is as such:
-- 
+
+`Process Ghosting` follows a similar flow, which is as such: 
 
 ## Talk is Cheap, Show me the code!
 
