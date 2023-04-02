@@ -128,7 +128,10 @@ However, Windows does not like mapped executables being tampered with so it star
 - Trying to overwrite the file with `CREATE_ALWAYS` will result in `ACCESS_DENIED`
 The interesting fact here is that these restrictions come in only when the executable is mapped into an Image Section. This mechanism allows for the following flow:
 
+![](./img/possible_behaviour.png)
 
+`Process Ghosting` follows a similar flow, which is as such:
+- 
 
 ## Talk is Cheap, Show me the code!
 
