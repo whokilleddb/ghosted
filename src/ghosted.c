@@ -104,6 +104,7 @@ HANDLE prepare_target(char * target_exe) {
 	NTSTATUS _status;
 	IO_STATUS_BLOCK io_status;
 	FILE_DISPOSITION_INFORMATION f_fileinfo;
+	f_fileinfo.DeleteFile = TRUE;
 
 	// Create Fake File
 	h_tfile = CreateFileA(
@@ -578,6 +579,7 @@ int spawn_process(char* real_exe, char* fake_exe) {
 
 	DWORD entry_point = get_ep_rva(base_addr);
 	UnmapViewOfFile(base_addr);
+	printf("i> Deleting Fake File\n");
 	CloseHandle(hfakefile);
 	if (entry_point == 0) {
 		CloseHandle(hsection);

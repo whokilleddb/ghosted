@@ -5,7 +5,7 @@
 
 ![Process Ghosting](./img/PoC_Ghosting.png)
 
-## Processes Spawned Up, Callbacks Thrown Up [🎵](https://www.youtube.com/shorts/XO5gYTHo6HI)
+## Processes Spawned Up, Callbacks Get Thrown Up [🎵](https://www.youtube.com/shorts/XO5gYTHo6HI)
 
 
 An interesting question to ask is how do Security vendors scan processes? One of the methods, [as described my Microsoft in this post](https://www.microsoft.com/en-us/security/blog/2022/06/30/using-process-creation-properties-to-catch-evasion-techniques/), goes as follows:
@@ -130,8 +130,9 @@ The interesting fact here is that these restrictions come in only when the execu
 
 ![](./img/possible_behaviour.png)
 
+`Process Ghosting` follows a similar flow: 
 
-`Process Ghosting` follows a similar flow, which is as such: 
+![](./img/pg_flow.png)
 
 ## Talk is Cheap, Show me the code!
 
