@@ -241,6 +241,33 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 }
 ```
 
+### Mapping FIles
+
+Now, we need to create a file mapping with the [CreateFileMappingA](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createfilemappinga) function for the target file. Once created, we map the target file mapping into the address space of a calling process.
+
+The skeletal code for this would look as such:
+
+```c
+LPVOID get_loaded_addr(HANDLE hfile, DWORD f_size) {
+	LPVOID base_addr;
+	ULARGE_INTEGER mapping_size;
+	
+	mapping_size.QuadPart = f_size;
+	
+	// Create file mapping
+	HANDLE hmap = CreateFileMappingA(hfile, NULL, PAGE_READONLY, 0, 0, NULL);
+	
+	// Get Address of loaded section
+	base_addr = MapViewOfFile(hmap, FILE_MAP_READ, 0, 0, mapping_size.LowPart);
+	
+	return base_addr;
+}
+```
+
+Once the file has been successfully mapped, we return the base address of the memory location where the file is mapped. You can verify this by inspecting the address and seeing the `5A 4D` magic bytes.
+
+![](./img/map_addr.png)
+
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
 - https://fourcore.io/blogs/how-a-windows-process-is-created-part-1
