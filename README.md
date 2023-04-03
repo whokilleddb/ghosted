@@ -192,9 +192,13 @@ _status = NtSetInformationFile(
 	f_info);
 ```
 
+This code uses the `FILE_DISPOSITION_INFORMATION` structure with the `DeleteFile` field set to `TRUE`. This deletes the file as soon as the handle to the file is closed. 
+
 If the function is successful, the handle to the open file iis returned.
 
 ### Reading Bytes
+
+Nex
 
 ### Fetch Sections
 
