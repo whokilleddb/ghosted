@@ -134,14 +134,32 @@ The interesting fact here is that these restrictions come in only when the execu
 
 ![](./img/pg_flow.png)
 
-## Talk is Cheap, Show me the code!
+## Talk is Cheap, Show me the Code!
 
 Time to walk through the code flow for the project! The code is written in C because: 
 - It helps to understand everything going on at a very fundamental level
 - Because I can.
 
-Right away, the `main()` 
+The `main()` function takes in two command line arguments:
+```
+Usage: ghosted.exe <REAL EXE> <FAKE EXE>
+```
 
+The `<REAL EXE>` takes in the path to an executable on disk which we want to load using `Process Ghosting` while the `<FAKE EXE>` is the path where the fake executable will be created before being deleted.
+
+### Initial Setup
+
+First, the program  checks the correct number of command line arguments. If the number of arguments are correct, the arguments are copied to two variables corresponding to the executable on disk and the file to be created for deletion. 
+
+The program also makes sure that:
+- The executable on disk actually existed and had `READ` permissions on it
+- The executable to be created does not already exist.
+
+If the checks pass, the program proceeds to call the `spawn_process()` function with the necessary parameters.
+
+### Reading Bytes
+
+### yhuj
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
