@@ -278,7 +278,16 @@ return p_info;
 }
 ```
 
-Here,  create a process using the [NtCreateProcess()](http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FProcess%2FNtCreateProcess.html) function and the section handle./
+Here, we create a process using the [NtCreateProcess()](http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FProcess%2FNtCreateProcess.html) function and the section handle. The function returns the handle to the Process created plus the `PROCESS_BASIC_INFORMATION` related to the process in the form a `CP_INFO` struct which has the following defintion:
+
+```c
+typedef struct _CP_INFO {
+	HANDLE p_handle;
+	PROCESS_BASIC_INFORMATION pb_info;
+} CP_INFO, * PCP_INFO;
+```
+
+Once the child process has been created, we can close the handle to the Section object as it is no longer needed. 
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
