@@ -270,7 +270,6 @@ LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
 	ULONG_PTR env_end = NULL;
 	ULONG_PTR buffer_end = (ULONG_PTR)proc_params + proc_params->Length;
 	SIZE_T buffer_size;
-	LPVOID _alloc_addr;
 
 	// Check for empty parameters
 	if (proc_params == NULL) {
@@ -394,7 +393,6 @@ BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFO
 // Assign process arguments and environment variables
 BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 	NTSTATUS _status;
-	DWORD ret_len = 0;
 	LPVOID env, param;
 	PEB* peb_copy = NULL;
 	UNICODE_STRING u_tpath = { 0 };
@@ -421,12 +419,6 @@ BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 	// Copy Target Paths
 	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
 	free(w_target_name);
-	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
-		return FALSE;
-	}
-
-	// Copy Target Paths
-	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
 		return FALSE;
 	}
