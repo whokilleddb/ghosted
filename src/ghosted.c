@@ -526,6 +526,7 @@ int spawn_process(char* real_exe, char* fake_exe) {
  	
 	if (hsection == NULL) {
 		CloseHandle(hfakefile);
+		free(f_bytes);
 		return -3;
 	}
 
