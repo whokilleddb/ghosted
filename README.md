@@ -279,10 +279,13 @@ From that, we get the Address of the PE's entrypoint  stored in the optional hea
 ```c
 DWORD get_ep_rva(LPVOID * base_addr) {
 	IMAGE_NT_HEADERS * nt_hdr = get_nt_hdr((unsigned char *)base_addr);
-	WORD arch = nt_hdr->FileHeader.Machine;
 	return nt_hdr->OptionalHeader.AddressOfEntryPoint;
 }
 ```
+
+Once we have the entrypoint address,
+
+
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
 - https://fourcore.io/blogs/how-a-windows-process-is-created-part-1

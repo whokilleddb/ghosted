@@ -16,47 +16,6 @@ typedef struct _CP_INFO {
     PROCESS_BASIC_INFORMATION pb_info;
 } CP_INFO, * PCP_INFO;
 
-// Get address where file is loaded in memory
-LPVOID get_loaded_addr(HANDLE hfile, DWORD f_size) {
-	HANDLE hmap;
-	LPVOID base_addr;
-	ULARGE_INTEGER mapping_size;
-
-	mapping_size.QuadPart = f_size;
-	
-	// Create file mapping
-	hmap = CreateFileMappingA(
-		hfile,
-		NULL,
-		PAGE_READONLY,
-		0,
-		0, 
-		NULL);
-
-	if (hmap == NULL) {
-		fprintf(stderr, "[!] Invalid Handle returned by NtCreateSession() (0x%x)\n", GetLastError());
-		return NULL;
-	}
-	
-	// Get Address of loaded section
-	base_addr = MapViewOfFile(
-		hmap, 
-		FILE_MAP_READ, 
-		0, 
-		0, 
-		mapping_size.LowPart);
-
-	if (NULL == base_addr) {
-		fprintf(stderr, "[!] MapViewOfFile() failed (0x%x)\n", GetLastError());
-		CloseHandle(hmap);
-		return NULL;
-	}
-
-	printf("> File is mapped into memory at: 0x%p\n", base_addr);
-	CloseHandle(hmap);
-	return base_addr;
-}
-
 // Get NT Header Data
 IMAGE_NT_HEADERS * get_nt_hdr(unsigned char * base_addr) {
 	IMAGE_DOS_HEADER* dos_hdr = (IMAGE_DOS_HEADER*)base_addr;
@@ -564,22 +523,18 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	
 	// Fetch Section object
 	hsection = fetch_sections(hfakefile, f_bytes, f_size);
- 	free(f_bytes);
+ 	
 	if (hsection == NULL) {
 		CloseHandle(hfakefile);
 		return -3;
 	}
 
-	base_addr = get_loaded_addr(hfakefile, f_size);
-	if (base_addr == NULL) {
-		CloseHandle(hsection);
-		CloseHandle(hfakefile);
-		return -4;	
-	}
+	// Get Entry Point of PE image
+	DWORD entry_point = get_ep_rva(f_bytes);
+	free(f_bytes);
 
-	DWORD entry_point = get_ep_rva(base_addr);
-	UnmapViewOfFile(base_addr);
-	printf("i> Deleting Fake File\n");
+	printf("> Deleting Fake File\n");
+
 	CloseHandle(hfakefile);
 	if (entry_point == 0) {
 		CloseHandle(hsection);
