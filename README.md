@@ -290,6 +290,51 @@ typedef struct _CP_INFO {
 Once the child process has been created, we can close the handle to the Section object as it is no longer needed. 
 
 ### Assign process arguments and environment variables
+```c
+BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
+	LPVOID env, param;
+	PEB* peb_copy = NULL;
+	UNICODE_STRING u_tpath = { 0 };
+	UNICODE_STRING u_dll_dir = { 0 };
+	UNICODE_STRING u_curr_dir = { 0 };
+	wchar_t w_dir_path[MAX_PATH] = { 0 };
+	UNICODE_STRING u_window_name = { 0 };
+	PRTL_USER_PROCESS_PARAMETERS proc_params = NULL;
+	
+	wchar_t* w_target_name = (wchar_t*)malloc((strlen(target_name) + 1) * 2);
+	
+	RtlZeroMemory(w_target_name, _msize(w_target_name));
+	
+	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, target_name, -1, w_target_name, _msize(w_target_name));
+	
+	// Copy Target Paths
+	RtlInitUnicodeString(&u_tpath, w_target_name);
+	free(w_target_name);
+	
+	// Get Current Directory as Wide Chars
+	GetCurrentDirectoryW(MAX_PATH, w_dir_path);
+	RtlInitUnicodeString(&u_curr_dir, w_dir_path);
+	
+	// Copy DLL Path
+	RtlInitUnicodeString(&u_dll_dir, L"C:\\Windows\\System32");
+	
+	// Name of Window
+	RtlInitUnicodeString(&u_window_name, L"db_was_here");
+	
+	// Set Environment
+	env = NULL;
+	CreateEnvironmentBlock(&env, NULL, TRUE);
+	RtlCreateProcessParameters(&proc_params, (PUNICODE_STRING)&u_tpath, (PUNICODE_STRING)&u_dll_dir, (PUNICODE_STRING)&u_curr_dir, (PUNICODE_STRING)&u_tpath, env, (PUNICODE_STRING)&u_window_name, NULL, NULL, NULL);
+	
+	param = write_params(p_info->p_handle, proc_params);
+	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
+	write_params_to_peb(param, p_info->p_handle, &(p_info->pb_info))
+	free(peb_copy);
+	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
+	free(peb_copy);
+	return TRUE;
+}
+```
 
 Before setting assigning process arguments and environment variables, we need to convert our target executable name to a wide-string. 
 
