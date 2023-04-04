@@ -418,18 +418,6 @@ BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 		return FALSE;
 	}
 
-	_status = NtQueryInformationProcess(
-		p_info->p_handle,
-		ProcessBasicInformation,
-		&(p_info->pb_info),
-		sizeof(PROCESS_BASIC_INFORMATION),
-		&ret_len);
-
-	if (!__check_nt_status(_status, "NtQueryInformationProcess()")) {
-		free(w_target_name);
-		return FALSE;
-	}
-
 	// Copy Target Paths
 	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
 	free(w_target_name);

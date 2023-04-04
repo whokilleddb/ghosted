@@ -291,7 +291,7 @@ Once the child process has been created, we can close the handle to the Section 
 
 ### Assign process arguments and environment variables
 
-Before setting assigning process arguments and environment variables.
+Before setting assigning process arguments and environment variables, we need to convert our target executable name to a wide-array string
 
 
 ## References
