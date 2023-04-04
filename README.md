@@ -289,6 +289,11 @@ typedef struct _CP_INFO {
 
 Once the child process has been created, we can close the handle to the Section object as it is no longer needed. 
 
+### Assign process arguments and environment variables
+
+Before setting assigning process arguments and environment variables.
+
+
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
 - https://fourcore.io/blogs/how-a-windows-process-is-created-part-1

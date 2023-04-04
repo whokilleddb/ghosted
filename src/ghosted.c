@@ -391,7 +391,7 @@ BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFO
 	return TRUE;
 }
 
-// Set Environment Veriable
+// Assign process arguments and environment variables
 BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	DWORD ret_len = 0;
 	LPVOID env, param;
@@ -551,7 +551,7 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		return -6;
 	}
 	CloseHandle(hsection);
-	printf("==== Assigning Env and CL Arguments ====\n");
+	printf("==== Assign process arguments and environment variables ====\n");
 
 	wchar_t* w_fname = (wchar_t*)malloc((strlen(fake_exe) + 1) * 2);
 	if (w_fname == NULL) {
