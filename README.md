@@ -326,8 +326,6 @@ BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
 	write_params_to_peb(param, p_info->p_handle, &(p_info->pb_info))
 	free(peb_copy);
-	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
-	free(peb_copy);
 	return TRUE;
 }
 ```
@@ -469,7 +467,13 @@ Now considering the second optionn where they are in non-contigious memory. We i
 	return (LPVOID)proc_params;
 ```
 
-Coming back to a### ssign process arguments and environment variables to the child process, we use the [NtReadVirtualMemory()](https://www.pinvoke.net/default.aspx/ntdll/NtReadVirtualMemory.html) function to read and map the child process memory to a `PEB` structure. 
+Coming back to assign process arguments and environment variables to the child process, we use the [NtReadVirtualMemory()](https://www.pinvoke.net/default.aspx/ntdll/NtReadVirtualMemory.html) function to read and map the child process memory to a `PEB` structure. 
+
+Now that we have all the ingridients at at hand, we can call `write_params_to_peb()` to write the parameters to the child process. Basically we calculate where the base address of the PEB lies and the offset at which the `ProcessParameters` field is located and write the process argument to the child process at the same offset in the child process memory.
+
+### Running the child process
+
+We are almost there. 
 
 
 ## References

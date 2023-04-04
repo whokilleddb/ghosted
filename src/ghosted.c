@@ -364,8 +364,8 @@ PEB* read_peb(HANDLE hprocess, PROCESS_BASIC_INFORMATION* p_info)
 	return peb;
 }
 
-// Write to peb
-BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFORMATION* stPBI)
+// Write to process memory
+BOOL write_params_to_process_memory(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFORMATION* stPBI)
 {
 	// Get access to the remote PEB:
 	ULONGLONG ullPEBAddress = (ULONGLONG)(stPBI->PebBaseAddress);
@@ -380,7 +380,7 @@ BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFO
 	// Calculate offset of the parameters
 	LPVOID lpIMGBase = (LPVOID)(ullPEBAddress + ullOffset);
 
-	//Write parameters address into PEB:
+	// Write to process memory
 	SIZE_T lpulWritten = 0;
 	if (!WriteProcessMemory(hProcess, lpIMGBase, &lpParamsBase, sizeof(PVOID), &lpulWritten)) {
 		printf("Failed - Cannot update Params!");
@@ -479,7 +479,7 @@ BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 		return FALSE;
 	}
 
-	if (!write_params_to_peb(param, p_info->p_handle, &(p_info->pb_info))) {
+	if (!write_params_to_process_memory(param, p_info->p_handle, &(p_info->pb_info))) {
 		printf("Failed - Cannot update PEB: %08X", GetLastError());
 		free(peb_copy);
 		return FALSE;
