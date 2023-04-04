@@ -455,6 +455,21 @@ if (VirtualAllocEx(hprocess, buffer, buffer_size, MEM_COMMIT | MEM_RESERVE, PAGE
 }
 ```
 
+Now considering the second optionn where they are in non-contigious memory. We individually allocate the memory and write it to the child process:
+```c
+	VirtualAllocEx(hprocess, (LPVOID)proc_params, proc_params->Length, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL);
+	
+	if (proc_params->Environment) {
+		VirtualAllocEx(hprocess, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+
+		WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL);
+	}
+	
+	return (LPVOID)proc_params;
+```
+
+Coming back to a### ssign process arguments and environment variables to the child process, we use the [NtReadVirtualMemory()](https://www.pinvoke.net/default.aspx/ntdll/NtReadVirtualMemory.html) function to read and map the child process memory to a `PEB` structure. 
 
 
 ## References

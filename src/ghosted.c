@@ -486,12 +486,6 @@ BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 	}
 	free(peb_copy);
 
-	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
-	if (read_peb == NULL) {
-		return FALSE;
-	}
-	free(peb_copy);
-
 	return TRUE;
 }
 
