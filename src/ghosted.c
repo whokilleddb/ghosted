@@ -93,7 +93,7 @@ DWORD get_ep_rva(LPVOID * base_addr) {
 		return 0;
 	}
 
-	WORD arch = nt_hdr->FileHeader.Machine;
+//	WORD arch = nt_hdr->FileHeader.Machine;
 	
 	return nt_hdr->OptionalHeader.AddressOfEntryPoint;
 }

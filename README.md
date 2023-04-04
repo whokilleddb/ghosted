@@ -1,4 +1,4 @@
-# Ghosted - A PoC on Process Ghosting
+               # Ghosted - A PoC on Process Ghosting
 
 > "Ghost Processes Not People"
 
@@ -268,6 +268,21 @@ Once the file has been successfully mapped, we return the base address of the me
 
 ![](./img/map_addr.png)
 
+### Getting Entry Point
+
+![](https://www.researchgate.net/publication/322350142/figure/fig1/AS:866935558389760@1583704952167/A-general-layout-of-PE-file-depicting-members-of-the-PE-Header-and-PE-Optional-Header.ppm)
+
+With the base address of the mapped image, we map it to the `Portable Executable` format and fetch a pointer to a `NT Header` structure.
+
+From that, we get the Address of the PE's entrypoint  stored in the optional header.
+
+```c
+DWORD get_ep_rva(LPVOID * base_addr) {
+	IMAGE_NT_HEADERS * nt_hdr = get_nt_hdr((unsigned char *)base_addr);
+	WORD arch = nt_hdr->FileHeader.Machine;
+	return nt_hdr->OptionalHeader.AddressOfEntryPoint;
+}
+```
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
 - https://fourcore.io/blogs/how-a-windows-process-is-created-part-1
