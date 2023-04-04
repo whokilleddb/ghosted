@@ -1,4 +1,4 @@
-               # Ghosted - A PoC on Process Ghosting
+ # Ghosted - A PoC on Process Ghosting
 
 > "Ghost Processes Not People"
 
