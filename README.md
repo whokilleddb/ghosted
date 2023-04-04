@@ -473,7 +473,20 @@ Now that we have all the ingridients at at hand, we can call `write_params_to_pe
 
 ### Running the child process
 
-We are almost there. 
+We are almost there. Our child process is all ready. Now all we need to do is create a thread in the child process. Remember we got the entry point offset? Add that to the Image Base Adress obtained from the Process's PEB to get the address of the Entry Point function.
+
+Finally, we can create a thread with `NtCreateThreadEx()` and wait infitinitely using for it's completetion with `WaitForSingleObject` as follows:
+
+```c
+ULONGLONG image_base = (ULONGLONG)(peb_copy.ImageBaseAddress);
+ULONGLONG proc_entry = entry_point + image_base;
+printf("==== Creating Thread In Child Process ====\n");
+HANDLE hthread = NULL;
+
+NtCreateThreadEx(&hthread, THREAD_ALL_ACCESS, NULL, p_info->p_handle, (LPTHREAD_START_ROUTINE)(proc_entry), NULL, FALSE, NULL, NULL, NULL, NULL);
+```
+
+That should spawn the Executable WITHOUT A FILE ON DISK!
 
 
 ## References
