@@ -291,8 +291,13 @@ Once the child process has been created, we can close the handle to the Section 
 
 ### Assign process arguments and environment variables
 
-Before setting assigning process arguments and environment variables, we need to convert our target executable name to a wide-array string
+Before setting assigning process arguments and environment variables, we need to convert our target executable name to a wide-string. 
 
+Then, we need to copy various parameters like into `UNICODE_STRING` structures including: Name/Path of target executable, Current Director, DLL path, and name of the Window.
+
+Finally, we use the [CreateEnvironmentBlock()](https://learn.microsoft.com/en-us/windows/win32/api/userenv/nf-userenv-createenvironmentblock) function to get the environment variables for the specified user.
+
+With all of this at hand, we can now call the [RtlCreateProcessParameters(](https://www.freepascal.org/daily/packages/winunits-jedi/jwanative/rtlcreateprocessparameters.html) function to register our own process parameters.
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
