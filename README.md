@@ -1,4 +1,4 @@
- # Ghosted - A PoC on Process Ghosting
+# Ghosted - A PoC on Process Ghosting
 
 > "Ghost Processes Not People"
 
@@ -7,7 +7,6 @@
 ## Introduction
 `Process Ghosting` is a technique of running payloads from an executable that has already been deleted. On Windows. it is possible to create a file, put it in a delete pending stage, write your payload to it, map it to an image section for it, close the file handle to delete the file, and then finally create a process from the mapped image section. This, essentially, is the `Process Ghosting` process.  In this way, the created process does not have an associated executable file on disk which makes detection difficult for certain EDRs/AV engines.
 
-![Process Ghosting](./img/PoC_Ghosting.png)
 
 ## Processes Spawned Up, Callbacks Get Thrown Up [🎵](https://www.youtube.com/shorts/XO5gYTHo6HI)
 
@@ -222,7 +221,7 @@ unsigned char * read_orig_exe(char * original_exe) {
 }
 ```
 
-### Fetch Sections
+### Create Section Object
 
 Now that we have our target file ready in _Delete-Pending_ stage and the contents we wish to write to it, we first write the payload to it. Then we use the [NtCreateSection](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntcreatesection) to create a session object for the target file. If there are no errors encountered during this, the handle to the _Section Object_ is returned:
 
@@ -243,7 +242,7 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 
 ### Getting Entry Point
 
-![](https://www.researchgate.net/publication/322350142/figure/fig1/AS:866935558389760@1583704952167/A-general-layout-of-PE-file-depicting-members-of-the-PE-Header-and-PE-Optional-Header.ppm)
+![](./img/header.svg)
 
 Next up, we map the file bytes to the `Portable Executable` format and fetch a pointer to an `NT Header` structure.
 
@@ -287,7 +286,7 @@ Once the child process has been created, we can close the handle to the Section 
 
 ### Assign process arguments and environment variables
 ```c
-BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
+BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	LPVOID env, param;
 	PEB* peb_copy = NULL;
 	UNICODE_STRING u_tpath = { 0 };
@@ -297,15 +296,8 @@ BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 	UNICODE_STRING u_window_name = { 0 };
 	PRTL_USER_PROCESS_PARAMETERS proc_params = NULL;
 	
-	wchar_t* w_target_name = (wchar_t*)malloc((strlen(target_name) + 1) * 2);
-	
-	RtlZeroMemory(w_target_name, _msize(w_target_name));
-	
-	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, target_name, -1, w_target_name, _msize(w_target_name));
-	
 	// Copy Target Paths
 	RtlInitUnicodeString(&u_tpath, w_target_name);
-	free(w_target_name);
 	
 	// Get Current Directory as Wide Chars
 	GetCurrentDirectoryW(MAX_PATH, w_dir_path);
@@ -486,8 +478,19 @@ HANDLE hthread = NULL;
 NtCreateThreadEx(&hthread, THREAD_ALL_ACCESS, NULL, p_info->p_handle, (LPTHREAD_START_ROUTINE)(proc_entry), NULL, FALSE, NULL, NULL, NULL, NULL);
 ```
 
-That should spawn the Executable WITHOUT A FILE ON DISK!
+That should spawn the processes without having an executable disk!
 
+## Demo Time!
+
+Remember the demo executable we created at the start of this blog? Lets run it with our now-ready process-ghosting program. We run the program as follows:
+
+```
+ghosted.exe Z:\demo.exe .\deleteme.exe
+```
+
+![Process Ghosting](./img/PoC_Ghosting.png)
+
+Notice how Process Hacker shows no Image File on disk? This indicates that the process was successfully ghosted and our PoC is working!
 
 ## References
 - https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack
