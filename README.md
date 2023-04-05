@@ -5,14 +5,14 @@
 ![](https://inspiredbusinessconcepts.com/wp-content/uploads/2022/10/ghosting.jpg)
 
 ## Introduction
-`Process Ghosting` is a technique of running EXE payloads that has already been deleted. On Windows. it is possible to create a file, put it in a delete pending stage, write your payload to it, map it to an image section for it, close the file handle to delete the file and then finally create a process from the mapped image section. This, essentially, is the `Process Ghosting` process.  In this way, the created process does not have an associated executable file on disk which makes detections difficult for certain EDRs/AV engines.
+`Process Ghosting` is a technique of running payloads from an executable that has already been deleted. On Windows. it is possible to create a file, put it in a delete pending stage, write your payload to it, map it to an image section for it, close the file handle to delete the file, and then finally create a process from the mapped image section. This, essentially, is the `Process Ghosting` process.  In this way, the created process does not have an associated executable file on disk which makes detection difficult for certain EDRs/AV engines.
 
 ![Process Ghosting](./img/PoC_Ghosting.png)
 
 ## Processes Spawned Up, Callbacks Get Thrown Up [🎵](https://www.youtube.com/shorts/XO5gYTHo6HI)
 
 
-An interesting question to ask is how do Security vendors scan processes? One of the methods, [as described my Microsoft in this post](https://www.microsoft.com/en-us/security/blog/2022/06/30/using-process-creation-properties-to-catch-evasion-techniques/), goes as follows:
+An interesting question to ask is how do Security vendors scan processes? One of the methods, [as described by Microsoft in this post](https://www.microsoft.com/en-us/security/blog/2022/06/30/using-process-creation-properties-to-catch-evasion-techniques/), goes as follows:
 
 > Process creation callbacks in the kernel, such as those provided by the [_PsSetCreateProcessNotifyRoutineEx_](https://docs.microsoft.com/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutineex) API, is the functionality in the operating system that allows antimalware engines to inspect a process while it’s being created. It can intercept the creation of a process and perform a scan on the relevant executable, all before the process runs.
 
@@ -20,11 +20,11 @@ However, there is a catch. Looking at the documentation for [`PsSetCreateProcess
 
 > When a process is created, the process-notify routine runs in the context of the thread that created the new process. When a process is deleted, the process-notify routine runs in the context of the last thread to exit from the process.
 
-This means that callbacks are registered only when the first thread is spawned, which gives malware a window between time of creation and the time at which security vendors are notified about it. It is in this interval that malware can carry out image tampering leading to attacks like `Process Doppelgänging`, `Process Herpaderping` and `Process Ghosting`.
+This means that callbacks are registered only when the first thread is spawned, which gives malware a window between the time of creation and the time at which security vendors are notified about it. It is in this interval that malware can carry out image tampering leading to attacks like `Process Doppelgänging`, `Process Herpaderping`, and `Process Ghosting`.
 
 ## Processes vs Exes
 
-First, let us write a demo application which we will use to demonstrate certain artifacts throughout:
+First, let us write a demo application that we will use to demonstrate certain artifacts throughout:
 
 ```c
 // demo.c
@@ -38,7 +38,7 @@ int main() {
 }
 ```
 
-Compiling and running this program outputs the process's PID. Running the process and inspecting it's properties in _Process Hacker2_ shows the following:
+Compiling and running this program outputs the process's PID. Running the process and inspecting its properties in _Process Hacker2_ shows the following:
 
 ![](./img/demo_in_ph2.png)
 
@@ -46,7 +46,7 @@ Notice how the `demo.exe` executable is listed as the `Image File name` for the 
 
 > It’s important to note that processes are not executables, and executables are not processes.
 
-This [blog](https://fourcore.io/blogs/how-a-windows-process-is-created-part-2) does a good job of explaining the process creation flow carried out by [CreateProcess()](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa) to launch a process on Windows. Long story short, Windows uses function calls like `NtCreateUserProcess()` to launch a process, but the indiviual API components can also be called to launch a process. 
+This [blog](https://fourcore.io/blogs/how-a-windows-process-is-created-part-2) does a good job of explaining the process creation flow carried out by [CreateProcess()](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa) to launch a process on Windows. Long story short, Windows uses function calls like `NtCreateUserProcess()` to launch a process, but the individual API components can also be called to launch a process. 
 
 The steps to launch a process from an executable can be summarized as such:
 - Open an Executable file and get a handle to it
@@ -85,9 +85,9 @@ NtCreateProcess(
   IN HANDLE             _ExceptionPort_ OPTIONAL );
 ```
 
-Note how the function takes the handle to a Secion, and not a file? This symbolizes that we don't necessarily need a file-on-disk to create a process.
+Note how the function takes the handle to a Section, and not a file? This symbolizes that we don't necessarily need a file-on-disk to create a process.
 
-Next up, look up the defintion of [PsSetCreateProcessNotifyRoutine](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutine):
+Next up, look up the definition of [PsSetCreateProcessNotifyRoutine](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutine):
 
 ```Cpp
 NTSTATUS PsSetCreateProcessNotifyRoutine( [in] PCREATE_PROCESS_NOTIFY_ROUTINE NotifyRoutine, [in] BOOLEAN Remove );
@@ -152,17 +152,17 @@ The `<REAL EXE>` takes in the path to an executable on disk which we want to loa
 
 ### Initial Setup
 
-First, the program  checks the correct number of command line arguments. If the number of arguments are correct, the arguments are copied to two variables corresponding to the executable on disk and the file to be created for deletion. 
+First, the program checks the correct number of command line arguments. If the number of arguments is correct, the arguments are copied to two variables corresponding to the executable on disk and the file to be created for deletion. 
 
 The program also makes sure that:
-- The executable on disk actually existed and had `READ` permissions on it
+- The executable on disk from which the payload is to be read exists and had `READ` permissions on it
 - The executable to be created does not already exist.
 
 If the checks pass, the program proceeds to call the `spawn_process()` function with the necessary parameters.
 
 ### Prepare Target
 
-Next up, the we need to create the target fake file where the payload would be written with `DELETE` permission.
+Next up, we need to create the target fake file where the payload would be written with `DELETE` permission.
 
 ```c
 h_tfile = CreateFileA(
@@ -197,11 +197,11 @@ _status = NtSetInformationFile(
 
 This code uses the `FILE_DISPOSITION_INFORMATION` structure with the `DeleteFile` field set to `TRUE`. This deletes the file as soon as the handle to the file is closed. 
 
-If the function is successful, the handle to the open file iis returned.
+If the function is successful, the handle to the open file is returned.
 
 ### Reading Bytes
 
-Now, we need to read the bytes from the original payload. These bytes can also be fetched from a remote source like a URL or a TCP Stream (future project idea?). Basically, we read the bytes from the file  as `unsigned char` and store them on the heap and return a pointer to it. The main code which does this is as follows:
+Now, we need to read the bytes from the original payload. These bytes can also be fetched from a remote source like a URL or a TCP Stream (future project idea?). We read the bytes from the file as `unsigned char` and store them on the heap and return a pointer to it. The main code which does this is as follows:
 
 ```c
 unsigned char * read_orig_exe(char * original_exe) {
@@ -245,9 +245,9 @@ HANDLE fetch_sections(HANDLE hfile, unsigned char * f_bytes, DWORD f_size) {
 
 ![](https://www.researchgate.net/publication/322350142/figure/fig1/AS:866935558389760@1583704952167/A-general-layout-of-PE-file-depicting-members-of-the-PE-Header-and-PE-Optional-Header.ppm)
 
-Next up, we map the file bytes to the `Portable Executable` format and fetch a pointer to a `NT Header` structure.
+Next up, we map the file bytes to the `Portable Executable` format and fetch a pointer to an `NT Header` structure.
 
-From that, we get the Address of the PE's entrypoint  stored in the optional header.
+From that, we get the Relative Address of the PE's entrypoint stored in the optional header.
 
 ```c
 DWORD get_ep_rva(LPVOID * base_addr) {
@@ -256,10 +256,10 @@ DWORD get_ep_rva(LPVOID * base_addr) {
 }
 ```
 
-Once we have the entrypoint address, we  can free the bytes as they are no longer needed, as well as the handle to the target file is closed, thereby deleting it!
+Once we have the entry-point offset, we can free the bytes as they are no longer needed, as well as the handle to the target file is closed, thereby deleting it!
 
 ### Spawn A Child Process
-Now that we our section handle, we need to create a child process with the Section handle.
+Now that we have our section handle, we need to create a child process with the Section handle.
 
 ```c
 PCP_INFO create_cp(HANDLE hsection) {
@@ -274,7 +274,7 @@ PCP_INFO create_cp(HANDLE hsection) {
 }
 ```
 
-Here, we create a process using the [NtCreateProcess()](http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FProcess%2FNtCreateProcess.html) function and the section handle. The function returns the handle to the Process created plus the `PROCESS_BASIC_INFORMATION` related to the process in the form a `CP_INFO` struct which has the following defintion:
+Here, we create a process using the [NtCreateProcess()](http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FProcess%2FNtCreateProcess.html) function and the section handle. The function returns the handle to the Process created plus the `PROCESS_BASIC_INFORMATION` related to the process in the form of a `CP_INFO` struct which has the following definition:
 
 ```c
 typedef struct _CP_INFO {
@@ -332,11 +332,11 @@ BOOL set_env(PCP_INFO p_info, LPSTR target_name) {
 
 Before setting assigning process arguments and environment variables, we need to convert our target executable name to a wide-string. 
 
-Then, we need to copy various parameters like into `UNICODE_STRING` structures including: Name/Path of target executable, Current Director, DLL path, and name of the Window.
+Then, we need to copy various parameters into `UNICODE_STRING` structures including Name/Path of the target executable, Current Director, DLL path, and name of the Window.
 
 Finally, we use the [CreateEnvironmentBlock()](https://learn.microsoft.com/en-us/windows/win32/api/userenv/nf-userenv-createenvironmentblock) function to get the environment variables for the specified user.
 
-With all of this at hand, we can now call the [RtlCreateProcessParameters(](https://www.freepascal.org/daily/packages/winunits-jedi/jwanative/rtlcreateprocessparameters.html) function to register our own process parameters.
+With all of this at hand, we can now call the [RtlCreateProcessParameters(](https://www.freepascal.org/daily/packages/winunits-jedi/jwanative/rtlcreateprocessparameters.html) function to register our process parameters.
 
 Now, this is the part where it gets tricky. First, take a look at the `write_params()` function:
 
@@ -383,9 +383,9 @@ LPVOID write_params(HANDLE hprocess, PRTL_USER_PROCESS_PARAMETERS proc_params) {
 ```
 
 
-There are two cases which can arise during writing Process Parameters and the Environment Block: 
-- They are in continuous memory locations, i.e. one after the another
-- They are in non-continous memory locations
+There are two cases that can arise during writing Process Parameters and the Environment Block: 
+- They are in continuous memory locations, i.e. one after the other
+- They are in non-continuous memory locations
  
 Before that, check out the `RTL_USER_PROCESS_PARAMETERS` struct:
 ```c
@@ -422,7 +422,7 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS {
 } RTL_USER_PROCESS_PARAMETERS, * PRTL_USER_PROCESS_PARAMETERS;
 ```
 
-Now, back to dealing with the memory locations. For the first case we calculate the total size of the memory region that we need to allocate, in order to write both the Process Parameters and the Environment block:
+Now, back to dealing with the memory locations. For the first case, we calculate the total size of the memory region that we need to allocate, to write both the Process Parameters and the Environment block:
 
 ```c
 PVOID buffer = proc_params;
@@ -453,7 +453,7 @@ if (VirtualAllocEx(hprocess, buffer, buffer_size, MEM_COMMIT | MEM_RESERVE, PAGE
 }
 ```
 
-Now considering the second optionn where they are in non-contigious memory. We individually allocate the memory and write it to the child process:
+Now considering the second option where they are in non-contiguous memory. We individually allocate the memory and write it to the child process:
 ```c
 	VirtualAllocEx(hprocess, (LPVOID)proc_params, proc_params->Length, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	WriteProcessMemory(hprocess, (LPVOID)proc_params, (LPVOID)proc_params, proc_params->Length, NULL);
@@ -469,13 +469,13 @@ Now considering the second optionn where they are in non-contigious memory. We i
 
 Coming back to assign process arguments and environment variables to the child process, we use the [NtReadVirtualMemory()](https://www.pinvoke.net/default.aspx/ntdll/NtReadVirtualMemory.html) function to read and map the child process memory to a `PEB` structure. 
 
-Now that we have all the ingridients at at hand, we can call `write_params_to_peb()` to write the parameters to the child process. Basically we calculate where the base address of the PEB lies and the offset at which the `ProcessParameters` field is located and write the process argument to the child process at the same offset in the child process memory.
+Now that we have all the ingredients at hand, we can call `write_params_to_peb()` to write the parameters to the child process. Basically, we calculate where the base address of the PEB lies and the offset at which the `ProcessParameters` field is located and write the process argument to the child process at the same offset in the child process memory.
 
 ### Running the child process
 
-We are almost there. Our child process is all ready. Now all we need to do is create a thread in the child process. Remember we got the entry point offset? Add that to the Image Base Adress obtained from the Process's PEB to get the address of the Entry Point function.
+We are almost there. Our child process is ready. Now, all we need to do is create a thread in the child process. Remember we got the entry point offset? Add that to the Image Base Address obtained from the Process's PEB to get the address of the Entry Point function.
 
-Finally, we can create a thread with `NtCreateThreadEx()` and wait infitinitely using for it's completetion with `WaitForSingleObject` as follows:
+Finally, we can create a thread with `NtCreateThreadEx()` and wait infinitely for it's competition with `WaitForSingleObject` as follows:
 
 ```c
 ULONGLONG image_base = (ULONGLONG)(peb_copy.ImageBaseAddress);
