@@ -460,7 +460,7 @@ BOOL set_env(PCP_INFO p_info, LPWSTR w_target_name) {
 	}
 
 	peb_copy = read_peb(p_info->p_handle, &(p_info->pb_info));
-	if (read_peb == NULL) {
+	if (peb_copy == NULL) {
 		return FALSE;
 	}
 
